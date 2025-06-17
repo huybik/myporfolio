@@ -1,0 +1,1816 @@
+./index.html
+---
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Portfolio Drive</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div id="game-container">
+      <canvas id="gameCanvas"></canvas>
+    </div>
+    <script src="js/config.js"></script>
+    <script src="js/utils.js"></script>
+    <script src="js/input.js"></script>
+    <script src="js/player.js"></script>
+    <script src="js/world.js"></script>
+    <script src="js/stops.js"></script>
+    <script src="js/ui.js"></script>
+    <!-- Add UI -->
+    <script src="js/main.js"></script>
+  </body>
+</html>
+
+
+---
+./js/config.js
+---
+// js/config.js
+const Config = {
+  CANVAS_WIDTH: 800,
+  CANVAS_HEIGHT: 600,
+  TARGET_FPS: 60,
+  KeyBindings: {
+    MOVE_LEFT: ["ArrowLeft", "a", "A"],
+    MOVE_RIGHT: ["ArrowRight", "d", "D"],
+    INTERACT: ["Enter", " ", "f", "F"],
+  },
+  DEBUG_MODE: true,
+};
+
+
+---
+./js/input.js
+---
+// js/input.js
+const Input = {
+  keys: {},
+  init() {
+    window.addEventListener("keydown", (e) => this.handleKeyDown(e));
+    window.addEventListener("keyup", (e) => this.handleKeyUp(e));
+    if (Config.DEBUG_MODE) console.log("Input system initialized.");
+  },
+  handleKeyDown(e) {
+    this.keys[e.key] = true;
+  },
+  handleKeyUp(e) {
+    this.keys[e.key] = false;
+  },
+  isPressed(action) {
+    const boundKeys = Config.KeyBindings[action];
+    if (boundKeys) {
+      return boundKeys.some((key) => this.keys[key]);
+    }
+    return false;
+  },
+  isMoveLeftPressed() {
+    return this.isPressed("MOVE_LEFT");
+  },
+  isMoveRightPressed() {
+    return this.isPressed("MOVE_RIGHT");
+  },
+  isInteractPressed() {
+    return this.isPressed("INTERACT");
+  },
+};
+Input.init();
+
+
+---
+./js/main.js
+---
+// js/main.js
+class Game {
+  constructor() {
+    this.canvas = document.getElementById("gameCanvas");
+    this.ctx = this.canvas.getContext("2d");
+    this.lastTime = 0;
+    this.gameTime = 0;
+    this.deltaTime = 0;
+    this.frameCount = 0;
+    this.player = null;
+    this.world = null;
+    this.ui = null;
+    this.init();
+  }
+  init() {
+    this.canvas.width = Config.CANVAS_WIDTH;
+    this.canvas.height = Config.CANVAS_HEIGHT;
+    this.ctx.imageSmoothingEnabled = false;
+    this.ctx.mozImageSmoothingEnabled = false;
+    this.ctx.webkitImageSmoothingEnabled = false;
+    this.ctx.msImageSmoothingEnabled = false;
+    this.player = new Player(this);
+    this.ui = new UI(this);
+    this.world = new World(this);
+    if (Config.DEBUG_MODE) {
+      console.log(
+        "Game initialized with Player, World, StopsManager, and UI ready."
+      );
+    }
+    this.gameLoop = this.gameLoop.bind(this);
+    requestAnimationFrame(this.gameLoop);
+  }
+  update(deltaTime) {
+    this.player.update(deltaTime);
+    const worldScrollSpeed = this.player.currentSpeed;
+    this.world.update(worldScrollSpeed);
+    StopsManager.update(
+      this.world.worldX,
+      this.player.screenX,
+      this.player.width
+    );
+  }
+  render() {
+    this.world.render(this.ctx);
+    const playerGroundY =
+      this.player.effectiveY + this.player.height - this.player.wheelRadius;
+    StopsManager.render(this.ctx, this.world.worldX, playerGroundY);
+    this.player.render(this.ctx);
+    this.ui.render(this.ctx);
+    if (Config.DEBUG_MODE) {
+      this.ctx.fillStyle = "white";
+      this.ctx.font = "12px Courier New";
+      this.ctx.textAlign = "left";
+      this.ctx.fillText(`FPS: ${(1 / this.deltaTime).toFixed(0)}`, 10, 20);
+      this.ctx.fillText(`GameTime: ${this.gameTime.toFixed(2)}s`, 10, 35);
+    }
+  }
+  gameLoop(currentTime) {
+    if (this.lastTime === 0) {
+      this.lastTime = currentTime;
+    }
+    this.deltaTime = (currentTime - this.lastTime) / 1000;
+    this.lastTime = currentTime;
+    this.gameTime += this.deltaTime;
+    this.frameCount++;
+    const maxDeltaTime = (1 / Config.TARGET_FPS) * 3;
+    if (this.deltaTime > maxDeltaTime) {
+      this.deltaTime = maxDeltaTime;
+    }
+    this.update(this.deltaTime);
+    this.render();
+    requestAnimationFrame(this.gameLoop);
+  }
+}
+window.onload = () => {
+  const game = new Game();
+};
+
+
+---
+./js/player.js
+---
+// js/player.js
+class Player {
+  constructor(game) {
+    this.game = game;
+    this.width = 80;
+    this.height = 40;
+    this.screenX = (Config.CANVAS_WIDTH - this.width) / 2;
+    this.screenY = Config.CANVAS_HEIGHT - this.height - 60;
+    this.bobAngle = 0;
+    this.bobSpeed = 0.1;
+    this.bobAmplitude = 2;
+    this.wheelFrame = 0;
+    this.wheelAnimationSpeed = 0.2;
+    this.wheelRadius = 8;
+    this.currentSpeed = 0;
+    this.maxSpeed = 5;
+    this.acceleration = 0.1;
+    this.deceleration = 0.05;
+    this.effectiveY = this.screenY;
+    if (Config.DEBUG_MODE) console.log("Player initialized.");
+  }
+
+  update(deltaTime) {
+    let moving = false;
+    if (Input.isMoveRightPressed()) {
+      this.currentSpeed += this.acceleration;
+      if (this.currentSpeed > this.maxSpeed) this.currentSpeed = this.maxSpeed;
+      moving = true;
+    }
+    if (Input.isMoveLeftPressed()) {
+      this.currentSpeed -= this.acceleration;
+      if (this.currentSpeed < -this.maxSpeed)
+        this.currentSpeed = -this.maxSpeed;
+      moving = true;
+    }
+    if (!moving) {
+      if (this.currentSpeed > 0) {
+        this.currentSpeed -= this.deceleration;
+        if (this.currentSpeed < 0) this.currentSpeed = 0;
+      } else if (this.currentSpeed < 0) {
+        this.currentSpeed += this.deceleration;
+        if (this.currentSpeed > 0) this.currentSpeed = 0;
+      }
+    }
+    this.bobAngle += this.bobSpeed * (60 * deltaTime);
+    const bobOffset = Math.sin(this.bobAngle) * this.bobAmplitude;
+    this.effectiveY = this.screenY + bobOffset;
+    if (Math.abs(this.currentSpeed) > 0.1) {
+      this.wheelFrame +=
+        this.wheelAnimationSpeed *
+        Math.sign(this.currentSpeed) *
+        (60 * deltaTime);
+      if (this.wheelFrame >= 4) this.wheelFrame = 0;
+      if (this.wheelFrame < 0) this.wheelFrame = 3;
+    }
+  }
+
+  drawWheel(ctx, x, y, radius, frame) {
+    ctx.fillStyle = "#333333";
+    ctx.beginPath();
+    ctx.arc(Math.floor(x), Math.floor(y), Math.floor(radius), 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#777777";
+    ctx.beginPath();
+    ctx.arc(
+      Math.floor(x),
+      Math.floor(y),
+      Math.floor(radius * 0.5),
+      0,
+      Math.PI * 2
+    );
+    ctx.fill();
+    ctx.strokeStyle = "#555555";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    const angleOffset = (Math.PI / 2) * Math.floor(frame);
+    for (let i = 0; i < 2; i++) {
+      const angle = angleOffset + (i * Math.PI) / 2;
+      ctx.moveTo(
+        Math.floor(x + Math.cos(angle) * radius * 0.2),
+        Math.floor(y + Math.sin(angle) * radius * 0.2)
+      );
+      ctx.lineTo(
+        Math.floor(x + Math.cos(angle) * radius * 0.9),
+        Math.floor(y + Math.sin(angle) * radius * 0.9)
+      );
+    }
+    ctx.stroke();
+  }
+
+  render(ctx) {
+    const carX = this.screenX;
+    const carY = this.effectiveY;
+    drawPixelRect(
+      ctx,
+      carX,
+      carY,
+      this.width,
+      this.height - this.wheelRadius,
+      "#AA3333"
+    );
+    drawPixelRect(
+      ctx,
+      carX + this.width * 0.25,
+      carY - this.height * 0.3,
+      this.width * 0.5,
+      this.height * 0.4,
+      "#77AADD"
+    );
+    drawPixelRect(
+      ctx,
+      carX + this.width * 0.2,
+      carY - this.height * 0.3 - 5,
+      this.width * 0.6,
+      5,
+      "#882222"
+    );
+    drawPixelRect(
+      ctx,
+      carX + this.width - 5,
+      carY + this.height * 0.2,
+      5,
+      6,
+      "#FFFFDD"
+    );
+    drawPixelRect(ctx, carX, carY + this.height * 0.2, 5, 6, "#FF5555");
+    const wheelY = carY + this.height - this.wheelRadius;
+    const frontWheelX = carX + this.width * 0.2;
+    const rearWheelX = carX + this.width * 0.8 - this.wheelRadius * 2;
+    this.drawWheel(
+      ctx,
+      frontWheelX + this.wheelRadius,
+      wheelY,
+      this.wheelRadius,
+      this.wheelFrame
+    );
+    this.drawWheel(
+      ctx,
+      rearWheelX + this.wheelRadius,
+      wheelY,
+      this.wheelRadius,
+      this.wheelFrame
+    );
+    if (Config.DEBUG_MODE) {
+      ctx.strokeStyle = "lime";
+      ctx.lineWidth = 1;
+      ctx.strokeRect(
+        Math.floor(carX),
+        Math.floor(carY),
+        this.width,
+        this.height
+      );
+      ctx.fillStyle = "white";
+      ctx.font = "12px Courier New";
+      ctx.fillText(`Speed: ${this.currentSpeed.toFixed(2)}`, carX, carY - 10);
+    }
+  }
+}
+
+
+---
+./js/stops.js
+---
+// js/stops.js
+const StopMarkers = {
+  drawDefaultMarker: (ctx, x, y, isActive) => {
+    drawPixelRect(ctx, x - 15, y - 60, 30, 60, isActive ? "yellow" : "orange");
+    drawPixelRect(ctx, x - 12, y - 55, 24, 30, isActive ? "black" : "#333");
+    if (isActive) {
+      ctx.fillStyle = "yellow";
+      ctx.font = "10px Courier New";
+      ctx.textAlign = "center";
+      ctx.fillText("!", x, y - 40);
+      ctx.textAlign = "left";
+    }
+  },
+  drawArcadeCabinet: (ctx, x, y, isActive) => {
+    const cabinetWidth = 30;
+    const cabinetHeight = 50;
+    const screenHeight = 15;
+    const controlPanelHeight = 8;
+    const baseHeight = 5;
+    const mainColor = isActive ? "#FFD700" : "#D3D3D3";
+    const accentColor = "#808080";
+    const screenColor = isActive ? "#00FF00" : "#008000";
+    drawPixelRect(
+      ctx,
+      x - cabinetWidth / 2,
+      y - baseHeight,
+      cabinetWidth,
+      baseHeight,
+      accentColor
+    );
+    drawPixelRect(
+      ctx,
+      x - cabinetWidth / 2,
+      y - cabinetHeight,
+      cabinetWidth,
+      cabinetHeight - baseHeight,
+      mainColor
+    );
+    drawPixelRect(
+      ctx,
+      x - cabinetWidth / 2 - 2,
+      y - baseHeight - controlPanelHeight,
+      cabinetWidth + 4,
+      controlPanelHeight,
+      "#A0522D"
+    );
+    drawPixelRect(
+      ctx,
+      x - cabinetWidth / 2 + 3,
+      y - cabinetHeight + 3,
+      cabinetWidth - 6,
+      screenHeight + 6,
+      accentColor
+    );
+    drawPixelRect(
+      ctx,
+      x - cabinetWidth / 2 + 5,
+      y - cabinetHeight + 5,
+      cabinetWidth - 10,
+      screenHeight,
+      screenColor
+    );
+    if (isActive) {
+      drawPixelRect(
+        ctx,
+        x - cabinetWidth / 2 + 7,
+        y - cabinetHeight + 7,
+        2,
+        2,
+        "#FFFF00"
+      );
+      drawPixelRect(
+        ctx,
+        x - cabinetWidth / 2 + 15,
+        y - cabinetHeight + 10,
+        3,
+        2,
+        "#FF00FF"
+      );
+    }
+    drawPixelRect(
+      ctx,
+      x - cabinetWidth / 2,
+      y - cabinetHeight - 8,
+      cabinetWidth,
+      8,
+      "#FF6347"
+    );
+    if (isActive) {
+      ctx.fillStyle = "black";
+      ctx.font = "8px Courier New";
+      ctx.textAlign = "center";
+      ctx.fillText("AI", x, y - cabinetHeight - 1);
+      ctx.textAlign = "left";
+    }
+  },
+  drawHolographicTerminal: (ctx, x, y, isActive) => {
+    const baseWidth = 35;
+    const baseHeight = 8;
+    const postHeight = 25;
+    const screenWidth = 30;
+    const screenHeight = 20;
+    const primaryColor = isActive
+      ? Palettes.futuristic.lights[0]
+      : Palettes.futuristic.accents[1];
+    const accentColor = Palettes.futuristic.buildings[2];
+    drawPixelRect(
+      ctx,
+      x - baseWidth / 2,
+      y - baseHeight,
+      baseWidth,
+      baseHeight,
+      accentColor
+    );
+    drawPixelRect(
+      ctx,
+      x - 3,
+      y - baseHeight - postHeight,
+      6,
+      postHeight,
+      accentColor
+    );
+    const screenY = y - baseHeight - postHeight - screenHeight;
+    if (isActive) {
+      ctx.globalAlpha = 0.3;
+      drawPixelRect(
+        ctx,
+        x - screenWidth / 2 - 5,
+        screenY - 5,
+        screenWidth + 10,
+        screenHeight + 10,
+        Palettes.futuristic.lights[0]
+      );
+      ctx.globalAlpha = 0.6;
+      drawPixelRect(
+        ctx,
+        x - screenWidth / 2 - 2,
+        screenY - 2,
+        screenWidth + 4,
+        screenHeight + 4,
+        Palettes.futuristic.lights[0]
+      );
+      ctx.globalAlpha = 1.0;
+    }
+    drawPixelRect(
+      ctx,
+      x - screenWidth / 2,
+      screenY,
+      screenWidth,
+      screenHeight,
+      primaryColor
+    );
+    ctx.strokeStyle = isActive
+      ? Palettes.futuristic.accents[0]
+      : Palettes.futuristic.buildings[1];
+    ctx.lineWidth = 1;
+    for (let i = 0; i < 3; i++) {
+      const lineY = screenY + 5 + i * 5;
+      ctx.beginPath();
+      ctx.moveTo(Math.floor(x - screenWidth / 2 + 3), Math.floor(lineY));
+      ctx.lineTo(
+        Math.floor(x + screenWidth / 2 - 3),
+        Math.floor(lineY + (Math.random() - 0.5) * 2)
+      );
+      ctx.stroke();
+    }
+    if (isActive) {
+      drawPixelRect(
+        ctx,
+        x - screenWidth / 2 + 5,
+        screenY + 3,
+        3,
+        3,
+        Palettes.futuristic.lights[1]
+      );
+      drawPixelRect(
+        ctx,
+        x + screenWidth / 2 - 8,
+        screenY + screenHeight - 6,
+        3,
+        3,
+        Palettes.futuristic.lights[2]
+      );
+    }
+  },
+  drawPixelWarehouse: (ctx, x, y, isActive) => {
+    const buildingWidth = 50;
+    const buildingHeight = 40;
+    const roofHeight = 10;
+    const doorWidth = 15;
+    const doorHeight = 25;
+    const mainColor = isActive
+      ? Palettes.industrial.metal[1]
+      : Palettes.industrial.buildings[0];
+    const roofColor = Palettes.industrial.buildings[2];
+    const doorColor = Palettes.industrial.metal[2];
+    drawPixelRect(
+      ctx,
+      x - buildingWidth / 2,
+      y - buildingHeight,
+      buildingWidth,
+      buildingHeight,
+      mainColor
+    );
+    ctx.fillStyle = roofColor;
+    ctx.beginPath();
+    ctx.moveTo(
+      Math.floor(x - buildingWidth / 2 - 5),
+      Math.floor(y - buildingHeight)
+    );
+    ctx.lineTo(
+      Math.floor(x + buildingWidth / 2 + 5),
+      Math.floor(y - buildingHeight)
+    );
+    ctx.lineTo(
+      Math.floor(x + buildingWidth / 2),
+      Math.floor(y - buildingHeight - roofHeight)
+    );
+    ctx.lineTo(
+      Math.floor(x - buildingWidth / 2),
+      Math.floor(y - buildingHeight - roofHeight)
+    );
+    ctx.closePath();
+    ctx.fill();
+    drawPixelRect(
+      ctx,
+      x - doorWidth / 2,
+      y - doorHeight,
+      doorWidth,
+      doorHeight,
+      doorColor
+    );
+    drawPixelRect(
+      ctx,
+      x - doorWidth / 2,
+      y - doorHeight + 5,
+      doorWidth,
+      2,
+      lightenDarkenColor(doorColor, -30)
+    );
+    drawPixelRect(
+      ctx,
+      x - doorWidth / 2,
+      y - doorHeight + 12,
+      doorWidth,
+      2,
+      lightenDarkenColor(doorColor, -30)
+    );
+    if (isActive) {
+      drawPixelRect(
+        ctx,
+        x + doorWidth / 2 + 3,
+        y - doorHeight + 3,
+        5,
+        5,
+        Palettes.gaming.props[1]
+      );
+      drawPixelRect(
+        ctx,
+        x - buildingWidth / 2 - 10,
+        y - 10,
+        8,
+        10,
+        Palettes.desert[2]
+      );
+      drawPixelRect(
+        ctx,
+        x - buildingWidth / 2 - 12,
+        y - 15,
+        10,
+        5,
+        Palettes.desert[1]
+      );
+    }
+  },
+};
+
+const StopsManager = {
+  stops: [],
+  activeStop: null,
+  stopActivationRange: 100,
+  init() {
+    this.stops = [
+      {
+        id: "project_ai_game",
+        worldPositionX: 1500,
+        theme: "gaming",
+        linkURL: "https://example.com/ai-game-project",
+        promptText: "Press [F] for AI Game Project",
+        markerAssetFunction: StopMarkers.drawArcadeCabinet,
+        markerScreenYOffset: 0,
+        isReached: false,
+      },
+      {
+        id: "project_ai_ta",
+        worldPositionX: 3500,
+        theme: "futuristic",
+        linkURL: "https://example.com/ai-ta-project",
+        promptText: "Press [F] for AI TA Project",
+        markerAssetFunction: StopMarkers.drawHolographicTerminal,
+        markerScreenYOffset: 0,
+        isReached: false,
+      },
+      {
+        id: "project_truck_parts",
+        worldPositionX: 5500,
+        theme: "industrial",
+        linkURL: "https://example.com/truck-parts-project",
+        promptText: "Press [F] for Truck Parts Project",
+        markerAssetFunction: StopMarkers.drawPixelWarehouse,
+        markerScreenYOffset: 0,
+        isReached: false,
+      },
+    ];
+    if (Config.DEBUG_MODE)
+      console.log(
+        "StopsManager initialized with " + this.stops.length + " stops."
+      );
+  },
+  update(worldCurrentX, playerScreenX, playerWidth) {
+    this.activeStop = null;
+    const playerWorldCenterX = worldCurrentX + playerScreenX + playerWidth / 2;
+    for (const stop of this.stops) {
+      const distanceToStop = Math.abs(playerWorldCenterX - stop.worldPositionX);
+      if (distanceToStop < this.stopActivationRange / 2) {
+        this.activeStop = stop;
+        break;
+      }
+    }
+    if (this.activeStop && Input.isInteractPressed()) {
+      Config.KeyBindings.INTERACT.forEach((key) => (Input.keys[key] = false));
+      if (Config.DEBUG_MODE)
+        console.log(
+          `Interacting with stop: ${this.activeStop.id}, opening URL: ${this.activeStop.linkURL}`
+        );
+      window.open(this.activeStop.linkURL, "_blank");
+    }
+  },
+  render(ctx, worldCurrentX, playerGroundY) {
+    this.stops.forEach((stop) => {
+      const stopScreenX = stop.worldPositionX - worldCurrentX;
+      if (
+        stopScreenX > -this.stopActivationRange * 2 &&
+        stopScreenX < Config.CANVAS_WIDTH + this.stopActivationRange * 2
+      ) {
+        const markerY = playerGroundY + stop.markerScreenYOffset;
+        const isActive = this.activeStop && this.activeStop.id === stop.id;
+        if (typeof stop.markerAssetFunction === "function") {
+          stop.markerAssetFunction(ctx, stopScreenX, markerY, isActive);
+        } else {
+          StopMarkers.drawDefaultMarker(ctx, stopScreenX, markerY, isActive);
+        }
+        if (Config.DEBUG_MODE && isActive) {
+          ctx.strokeStyle = "yellow";
+          ctx.lineWidth = 1;
+          const debugRadius = this.stopActivationRange / 2;
+          ctx.beginPath();
+          ctx.arc(
+            Math.floor(stopScreenX),
+            Math.floor(markerY - 30),
+            Math.floor(debugRadius),
+            0,
+            Math.PI * 2
+          );
+          ctx.stroke();
+        }
+      }
+    });
+  },
+  getActiveStopPrompt() {
+    return this.activeStop ? this.activeStop.promptText : null;
+  },
+  getCurrentZone(worldCurrentX) {
+    let currentZone = {
+      name: "The Wasteland",
+      theme: "desert_start",
+      skyColor: Palettes.desert[4],
+    };
+    for (let i = this.stops.length - 1; i >= 0; i--) {
+      const stop = this.stops[i];
+      const zoneEntryPosition =
+        stop.worldPositionX -
+        Config.CANVAS_WIDTH * 0.75 -
+        Config.CANVAS_WIDTH * 0.5;
+      if (worldCurrentX > zoneEntryPosition) {
+        let skyColor = Palettes.desert[4];
+        if (stop.theme === "gaming") skyColor = Palettes.gaming.sky[0];
+        else if (stop.theme === "futuristic")
+          skyColor = Palettes.futuristic.sky[0];
+        else if (stop.theme === "industrial")
+          skyColor = Palettes.industrial.sky[0];
+        currentZone = {
+          name: `${
+            stop.theme.charAt(0).toUpperCase() + stop.theme.slice(1)
+          } Zone`,
+          theme: stop.theme,
+          skyColor: skyColor,
+        };
+        break;
+      }
+    }
+    if (
+      this.stops.length > 0 &&
+      worldCurrentX <
+        this.stops[0].worldPositionX -
+          Config.CANVAS_WIDTH * 0.75 -
+          Config.CANVAS_WIDTH * 0.5
+    ) {
+      currentZone = {
+        name: "Desert Drive",
+        theme: "desert_start",
+        skyColor: Palettes.desert[4],
+      };
+    }
+    return currentZone;
+  },
+};
+StopsManager.init();
+
+
+---
+./js/ui.js
+---
+// js/ui.js
+class UI {
+  constructor(game) {
+    this.game = game;
+    this.height = 50;
+    this.yPosition = Config.CANVAS_HEIGHT - this.height;
+    this.backgroundColor = "rgba(0, 0, 0, 0.8)";
+    this.borderColor = "#333333";
+    this.textColor = "#A0D0A0";
+    this.font = '16px "Courier New", Courier, monospace';
+    this.infoScreenWidth = 300;
+    this.infoScreenHeight = 30;
+    this.infoScreenX = (Config.CANVAS_WIDTH - this.infoScreenWidth) / 2;
+    this.infoScreenY =
+      this.yPosition + (this.height - this.infoScreenHeight) / 2;
+    this.infoScreenColor = "#102010";
+    this.infoScreenBorderColor = "#204020";
+    if (Config.DEBUG_MODE) console.log("UI initialized.");
+  }
+  drawPixelBorder(ctx, x, y, width, height, color, thickness = 1) {
+    ctx.strokeStyle = color;
+    ctx.lineWidth = thickness;
+    ctx.beginPath();
+    ctx.rect(
+      Math.floor(x) + 0.5,
+      Math.floor(y) + 0.5,
+      Math.floor(width) - 1,
+      Math.floor(height) - 1
+    );
+    ctx.stroke();
+  }
+  render(ctx) {
+    drawPixelRect(
+      ctx,
+      0,
+      this.yPosition,
+      Config.CANVAS_WIDTH,
+      this.height,
+      this.backgroundColor
+    );
+    this.drawPixelBorder(
+      ctx,
+      0,
+      this.yPosition,
+      Config.CANVAS_WIDTH,
+      this.height,
+      this.borderColor,
+      2
+    );
+    drawPixelRect(
+      ctx,
+      this.infoScreenX,
+      this.infoScreenY,
+      this.infoScreenWidth,
+      this.infoScreenHeight,
+      this.infoScreenColor
+    );
+    this.drawPixelBorder(
+      ctx,
+      this.infoScreenX,
+      this.infoScreenY,
+      this.infoScreenWidth,
+      this.infoScreenHeight,
+      this.infoScreenBorderColor,
+      2
+    );
+    ctx.fillStyle = this.textColor;
+    ctx.font = this.font;
+    ctx.textAlign = "center";
+    const activePrompt = StopsManager.getActiveStopPrompt();
+    let displayText = "";
+    const currentZone = StopsManager.getCurrentZone(this.game.world.worldX);
+    if (activePrompt) {
+      displayText = activePrompt;
+    } else if (currentZone) {
+      displayText = `Zone: ${currentZone.name}`;
+    } else {
+      displayText = "Portfolio Drive";
+    }
+    const textY = this.infoScreenY + this.infoScreenHeight / 2 + 6;
+    if (this.game.frameCount % 10 < 8 || !activePrompt) {
+      ctx.fillText(
+        displayText,
+        this.infoScreenX + this.infoScreenWidth / 2,
+        textY
+      );
+    }
+    ctx.strokeStyle = "rgba(50, 100, 50, 0.15)";
+    ctx.lineWidth = 1;
+    for (let i = 0; i < this.infoScreenHeight; i += 3) {
+      ctx.beginPath();
+      ctx.moveTo(this.infoScreenX, this.infoScreenY + i + 0.5);
+      ctx.lineTo(
+        this.infoScreenX + this.infoScreenWidth,
+        this.infoScreenY + i + 0.5
+      );
+      ctx.stroke();
+    }
+    ctx.textAlign = "left";
+    this.drawStatusLights(ctx);
+    this.drawMiniMapPlaceholder(ctx);
+  }
+  drawStatusLights(ctx) {
+    const lightSize = 8;
+    const padding = 10;
+    const startX = padding + 20;
+    const lightY = this.yPosition + (this.height - lightSize) / 2;
+    for (let i = 0; i < 3; i++) {
+      let lightColor = "#550000";
+      if (i === 0 && this.game.player.currentSpeed !== 0)
+        lightColor = "#00AA00";
+      else if (i === 1 && StopsManager.activeStop) lightColor = "#FFAA00";
+      else if (i === 2 && this.game.frameCount % 60 < 30)
+        lightColor = "#0055AA";
+      drawPixelRect(
+        ctx,
+        startX + i * (lightSize + padding),
+        lightY,
+        lightSize,
+        lightSize,
+        lightColor
+      );
+      this.drawPixelBorder(
+        ctx,
+        startX + i * (lightSize + padding),
+        lightY,
+        lightSize,
+        lightSize,
+        darkenColor(lightColor, 30),
+        1
+      );
+    }
+  }
+  drawMiniMapPlaceholder(ctx) {
+    const mapSize = this.height - 10;
+    const mapX = Config.CANVAS_WIDTH - mapSize - 25;
+    const mapY = this.yPosition + (this.height - mapSize) / 2;
+    drawPixelRect(ctx, mapX, mapY, mapSize, mapSize, this.infoScreenColor);
+    this.drawPixelBorder(
+      ctx,
+      mapX,
+      mapY,
+      mapSize,
+      mapSize,
+      this.infoScreenBorderColor,
+      2
+    );
+    drawPixelRect(
+      ctx,
+      mapX + mapSize / 2 - 2,
+      mapY + mapSize / 2 - 2,
+      4,
+      4,
+      this.textColor
+    );
+    StopsManager.stops.forEach((stop, index) => {
+      if (index < 3) {
+        const stopProgress =
+          (stop.worldPositionX - this.game.world.worldX) /
+          StopsManager.stops[StopsManager.stops.length - 1].worldPositionX;
+        const stopDotX = mapX + 5 + index * (mapSize / 4);
+        const stopDotY = mapY + mapSize * 0.75 - stopProgress * mapSize * 0.5;
+        let stopColor = "#505050";
+        if (StopsManager.activeStop && StopsManager.activeStop.id === stop.id) {
+          stopColor = Palettes.gaming.props[1];
+        } else if (this.game.world.worldX > stop.worldPositionX) {
+          stopColor = Palettes.gaming.props[0];
+        }
+        drawPixelRect(
+          ctx,
+          Math.floor(stopDotX),
+          Math.floor(stopDotY),
+          3,
+          3,
+          stopColor
+        );
+      }
+    });
+  }
+}
+function darkenColor(hex, percent) {
+  return lightenDarkenColor(hex, -Math.abs(percent));
+}
+
+
+---
+./js/utils.js
+---
+// js/utils.js
+function drawPixelRect(ctx, x, y, width, height, color) {
+  ctx.fillStyle = color;
+  ctx.fillRect(
+    Math.floor(x),
+    Math.floor(y),
+    Math.floor(width),
+    Math.floor(height)
+  );
+}
+
+function drawPixel(ctx, x, y, color, pixelSize = 1) {
+  ctx.fillStyle = color;
+  ctx.fillRect(
+    Math.floor(x * pixelSize),
+    Math.floor(y * pixelSize),
+    pixelSize,
+    pixelSize
+  );
+}
+
+function getRandomInt(min, max) {
+  min = Math.ceil(min);
+  max = Math.floor(max);
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+function getRandomColor(palette) {
+  if (!palette || palette.length === 0) return "#000000";
+  return palette[Math.floor(Math.random() * palette.length)];
+}
+
+function lightenDarkenColor(hex, percent) {
+  let usePound = false;
+  if (hex.startsWith("#")) {
+    hex = hex.slice(1);
+    usePound = true;
+  }
+  if (hex.length === 3) {
+    hex = hex
+      .split("")
+      .map((char) => char + char)
+      .join("");
+  }
+  if (hex.length !== 6) {
+    return (usePound ? "#" : "") + "000000";
+  }
+
+  const num = parseInt(hex, 16);
+  let r = (num >> 16) + percent;
+  r = Math.max(0, Math.min(255, r));
+
+  let g = ((num >> 8) & 0x00ff) + percent;
+  g = Math.max(0, Math.min(255, g));
+
+  let b = (num & 0x0000ff) + percent;
+  b = Math.max(0, Math.min(255, b));
+
+  const R = Math.round(r).toString(16).padStart(2, "0");
+  const G = Math.round(g).toString(16).padStart(2, "0");
+  const B = Math.round(b).toString(16).padStart(2, "0");
+
+  return (usePound ? "#" : "") + R + G + B;
+}
+
+const Palettes = {
+  desert: ["#D2B48C", "#C19A6B", "#A0522D", "#8B4513", "#F0E68C"],
+  gaming: {
+    terrain: ["#34A245", "#2A8C39", "#83E270"],
+    sky: ["#5C94FC", "#3060E1"],
+    structures: ["#808080", "#A0A0A0", "#606060"],
+    props: ["#FF0000", "#FFFF00", "#00FF00", "#FF00FF"],
+  },
+  futuristic: {
+    buildings: ["#A0A0C0", "#B0B0D0", "#707090", "#303050"],
+    lights: ["#00FFFF", "#FF00FF", "#FFFF00", "#7FFF00"],
+    accents: ["#E0E0FF", "#C0C0FF"],
+    sky: ["#202040", "#303050"],
+  },
+  industrial: {
+    buildings: ["#606060", "#707070", "#505050", "#404040"],
+    metal: ["#888888", "#999999", "#A0A0A0"],
+    rust: ["#B7410E", "#A0522D"],
+    smoke: ["#A9A9A9", "#C0C0C0", "#D3D3D3"],
+    sky: ["#778899", "#808080"],
+  },
+};
+
+function interpolateColor(hex1, hex2, factor) {
+  factor = Math.max(0, Math.min(1, factor));
+
+  const parseHexComponent = (hexComp) => {
+    if (hexComp.length === 3)
+      hexComp = hexComp
+        .split("")
+        .map((c) => c + c)
+        .join("");
+    if (hexComp.length !== 6) return [0, 0, 0];
+    return [
+      parseInt(hexComp.substring(0, 2), 16),
+      parseInt(hexComp.substring(2, 4), 16),
+      parseInt(hexComp.substring(4, 6), 16),
+    ];
+  };
+
+  const h1 = hex1.startsWith("#") ? hex1.slice(1) : hex1;
+  const h2 = hex2.startsWith("#") ? hex2.slice(1) : hex2;
+
+  try {
+    const [r1, g1, b1] = parseHexComponent(h1);
+    const [r2, g2, b2] = parseHexComponent(h2);
+
+    const r = Math.round(r1 + (r2 - r1) * factor);
+    const g = Math.round(g1 + (g2 - g1) * factor);
+    const b = Math.round(b1 + (b2 - b1) * factor);
+
+    const componentToHex = (c) => {
+      const hexVal = Math.max(0, Math.min(255, c)).toString(16);
+      return hexVal.length === 1 ? "0" + hexVal : hexVal;
+    };
+
+    return `#${componentToHex(r)}${componentToHex(g)}${componentToHex(b)}`;
+  } catch (e) {
+    console.error(
+      "Error in interpolateColor:",
+      e.message,
+      "Inputs:",
+      hex1,
+      hex2,
+      factor,
+      "Defaulting to hex2:",
+      hex2
+    );
+    return hex2.startsWith("#") ? hex2 : "#" + hex2;
+  }
+}
+
+
+---
+./js/world.js
+---
+// js/world.js
+class ParallaxLayer {
+  constructor(
+    scrollSpeedFactor,
+    color,
+    elementGenerator,
+    elementCount,
+    game,
+    world
+  ) {
+    this.scrollSpeedFactor = scrollSpeedFactor;
+    this.color = color;
+    this.elementGenerator = elementGenerator;
+    this.elementCount = elementCount;
+    this.game = game;
+    this.world = world;
+    this.elements = [];
+    this.generateInitialElements();
+  }
+  generateInitialElements() {
+    this.elements = [];
+    for (let i = 0; i < this.elementCount; i++) {
+      const x = Math.random() * Config.CANVAS_WIDTH * 2.5;
+      const y = Math.random() * Config.CANVAS_HEIGHT;
+      this.elements.push(
+        this.elementGenerator(x, y, this.color, this.game, this.world)
+      );
+    }
+  }
+  update(worldScrollSpeed) {
+    this.elements.forEach((element) => {
+      element.x -= worldScrollSpeed * this.scrollSpeedFactor;
+      const elementVisualWidth =
+        element.width || (element.radius ? element.radius * 2 : 50);
+      const wrapBuffer = Config.CANVAS_WIDTH * 0.5;
+      const totalVirtualWidth = Config.CANVAS_WIDTH * 2.5;
+      if (worldScrollSpeed > 0) {
+        if (element.x + elementVisualWidth < -wrapBuffer) {
+          element.x += totalVirtualWidth + Math.random() * 50;
+        }
+      } else if (worldScrollSpeed < 0) {
+        if (element.x > Config.CANVAS_WIDTH + wrapBuffer) {
+          element.x -= totalVirtualWidth + Math.random() * 50;
+        }
+      }
+    });
+  }
+  render(ctx) {
+    this.elements.forEach((element) => {
+      const elementVisualWidth =
+        element.width || (element.radius ? element.radius * 2 : 50);
+      if (
+        element.x + elementVisualWidth > -50 &&
+        element.x < Config.CANVAS_WIDTH + 50
+      ) {
+        this.world.drawElement(ctx, element);
+      }
+    });
+  }
+}
+
+class World {
+  constructor(game) {
+    this.game = game;
+    this.layers = [];
+    this.worldX = 0;
+    this.groundLevelY = Config.CANVAS_HEIGHT - 70;
+    this.currentTheme = "desert_start";
+    this.skyColor = Palettes.desert[4];
+    this.isTransitioning = false;
+    this.transitionProgress = 0;
+    this.transitionDurationWorldUnits = Config.CANVAS_WIDTH * 1.0;
+    this.transitionSourceSky = this.skyColor;
+    this.transitionTargetSky = this.skyColor;
+    this.transitionSourceTheme = this.currentTheme;
+    this.transitionTargetTheme = this.currentTheme;
+    this.switchedLayersForCurrentTransition = false;
+    this.initLayers(this.currentTheme);
+    if (Config.DEBUG_MODE) console.log("World initialized.");
+  }
+  static generateDesertDistant(x, y, baseColor, game, world) {
+    const width = getRandomInt(20, 40);
+    const height = getRandomInt(50, 100);
+    return {
+      type: "rect",
+      x: x,
+      y: world.groundLevelY - height - getRandomInt(20, 50),
+      width: width,
+      height: height,
+      color: getRandomColor(Palettes.desert.slice(1, 3)),
+    };
+  }
+  static generateDesertMid(x, y, baseColor, game, world) {
+    const r = Math.random();
+    if (r < 0.6) {
+      const cactusHeight = getRandomInt(20, 50);
+      return {
+        type: "cactus",
+        x: x,
+        y: world.groundLevelY - cactusHeight,
+        width: getRandomInt(6, 12),
+        height: cactusHeight,
+        color: Palettes.desert[1],
+      };
+    } else {
+      const size = getRandomInt(10, 25);
+      return {
+        type: "rect",
+        x: x,
+        y: world.groundLevelY - size,
+        width: size * (1 + Math.random() * 0.5),
+        height: size,
+        color: Palettes.desert[2],
+      };
+    }
+  }
+  static generateDesertGround(x, y, baseColor, game, world) {
+    return {
+      type: "rect",
+      x: x,
+      y: world.groundLevelY,
+      width: Config.CANVAS_WIDTH * 0.5 + getRandomInt(0, 10),
+      height: 70,
+      color: Palettes.desert[0],
+    };
+  }
+  static generateGamingSkyElement(x, y, baseColor, game, world) {
+    const cloudWidth = getRandomInt(30, 70);
+    const cloudHeight = getRandomInt(15, 30);
+    return {
+      type: "pixelCloud",
+      x: x,
+      y: getRandomInt(20, Config.CANVAS_HEIGHT * 0.3),
+      width: cloudWidth,
+      height: cloudHeight,
+      color: "#FFFFFF",
+      blockColor: "#D0D0F0",
+    };
+  }
+  static generateGamingDistant(x, y, baseColor, game, world) {
+    const width = getRandomInt(40, 80);
+    const height = getRandomInt(60, 120);
+    return {
+      type: "pixelStructure",
+      x: x,
+      y: world.groundLevelY - height - getRandomInt(10, 30),
+      width: width,
+      height: height,
+      colors: Palettes.gaming.structures,
+      density: 0.7,
+    };
+  }
+  static generateGamingMid(x, y, baseColor, game, world) {
+    if (Math.random() < 0.5) {
+      const trunkHeight = getRandomInt(10, 20);
+      const leavesHeight = getRandomInt(20, 35);
+      const leavesWidth = getRandomInt(15, 30);
+      return {
+        type: "pixelTree",
+        x: x,
+        y: world.groundLevelY - trunkHeight - leavesHeight,
+        trunkWidth: getRandomInt(4, 7),
+        trunkHeight: trunkHeight,
+        trunkColor: "#704214",
+        leavesWidth: leavesWidth,
+        leavesHeight: leavesHeight,
+        leavesColor: Palettes.gaming.terrain[0],
+      };
+    } else {
+      const size = getRandomInt(10, 20);
+      return {
+        type: "rect",
+        x: x,
+        y: world.groundLevelY - size - getRandomInt(5, 40),
+        width: size,
+        height: size,
+        color: getRandomColor(Palettes.gaming.props),
+      };
+    }
+  }
+  static generateGamingGround(x, y, baseColor, game, world) {
+    const segmentWidth = 40;
+    const groundLayer = world.layers.find(
+      (l) => l.elementGenerator === World.generateGamingGround
+    );
+    const scrollFactor = groundLayer ? groundLayer.scrollSpeedFactor : 1.0;
+    return {
+      type: "rect",
+      x: x,
+      y: world.groundLevelY,
+      width: Config.CANVAS_WIDTH * 0.5 + getRandomInt(0, 10),
+      height: 70,
+      color:
+        Math.floor((x + world.worldX * scrollFactor) / segmentWidth) % 2 === 0
+          ? Palettes.gaming.terrain[0]
+          : Palettes.gaming.terrain[1],
+    };
+  }
+  static generateFuturisticSkyElement(x, y, baseColor, game, world) {
+    if (Math.random() < 0.7) {
+      const size = getRandomInt(10, 40);
+      return {
+        type: "rect",
+        x: x,
+        y: getRandomInt(20, Config.CANVAS_HEIGHT * 0.4),
+        width: size,
+        height: size / getRandomInt(2, 4),
+        color: getRandomColor(
+          Palettes.futuristic.accents.map((c) => lightenDarkenColor(c, -100))
+        ),
+      };
+    } else {
+      const length = getRandomInt(50, 150);
+      return {
+        type: "rect",
+        x: x,
+        y: getRandomInt(Config.CANVAS_HEIGHT * 0.1, Config.CANVAS_HEIGHT * 0.5),
+        width: length,
+        height: 1,
+        color: getRandomColor(Palettes.futuristic.lights.map((c) => `${c}33`)),
+      };
+    }
+  }
+  static generateFuturisticDistant(x, y, baseColor, game, world) {
+    const buildingWidth = getRandomInt(30, 70);
+    const buildingHeight = getRandomInt(
+      100,
+      Math.floor(Config.CANVAS_HEIGHT * 0.6)
+    );
+    return {
+      type: "futuristicTower",
+      x: x,
+      y: world.groundLevelY - buildingHeight,
+      width: buildingWidth,
+      height: buildingHeight,
+      colors: Palettes.futuristic.buildings,
+      lightColors: Palettes.futuristic.lights,
+    };
+  }
+  static generateFuturisticMid(x, y, baseColor, game, world) {
+    if (Math.random() < 0.6) {
+      const platWidth = getRandomInt(40, 100);
+      const platHeight = getRandomInt(10, 30);
+      return {
+        type: "rect",
+        x: x,
+        y: world.groundLevelY - platHeight - getRandomInt(0, 50),
+        width: platWidth,
+        height: platHeight,
+        color: getRandomColor(Palettes.futuristic.buildings.slice(0, 2)),
+      };
+    } else {
+      const orbRadius = getRandomInt(5, 15);
+      return {
+        type: "glowingOrb",
+        x: x,
+        y: world.groundLevelY - orbRadius - getRandomInt(20, 70),
+        radius: orbRadius,
+        color: getRandomColor(Palettes.futuristic.lights),
+      };
+    }
+  }
+  static generateFuturisticGround(x, y, baseColor, game, world) {
+    const panelWidth = 60;
+    const groundLayer = world.layers.find(
+      (l) => l.elementGenerator === World.generateFuturisticGround
+    );
+    const scrollFactor = groundLayer ? groundLayer.scrollSpeedFactor : 1.0;
+    return {
+      type: "rect",
+      x: x,
+      y: world.groundLevelY,
+      width: Config.CANVAS_WIDTH * 0.5 + getRandomInt(0, 10),
+      height: 70,
+      color:
+        Math.floor((x + world.worldX * scrollFactor) / panelWidth) % 3 === 0
+          ? Palettes.futuristic.buildings[3]
+          : Palettes.futuristic.buildings[2],
+    };
+  }
+  static generateIndustrialSkyElement(x, y, baseColor, game, world) {
+    if (Math.random() < 0.5) {
+      const stackWidth = getRandomInt(8, 20);
+      const stackHeight = getRandomInt(
+        50,
+        Math.floor(Config.CANVAS_HEIGHT * 0.5)
+      );
+      return {
+        type: "rect",
+        x: x,
+        y: world.groundLevelY - stackHeight - getRandomInt(50, 100),
+        width: stackWidth,
+        height: stackHeight,
+        color: Palettes.industrial.buildings[3],
+      };
+    } else {
+      const cloudWidth = getRandomInt(50, 150);
+      const cloudHeight = getRandomInt(20, 40);
+      return {
+        type: "pixelCloud",
+        x: x,
+        y: getRandomInt(
+          Math.floor(Config.CANVAS_HEIGHT * 0.1),
+          Math.floor(Config.CANVAS_HEIGHT * 0.3)
+        ),
+        width: cloudWidth,
+        height: cloudHeight,
+        color: Palettes.industrial.smoke[0],
+        blockColor: Palettes.industrial.smoke[1],
+      };
+    }
+  }
+  static generateIndustrialDistant(x, y, baseColor, game, world) {
+    const buildingWidth = getRandomInt(60, 120);
+    const buildingHeight = getRandomInt(
+      80,
+      Math.floor(Config.CANVAS_HEIGHT * 0.4)
+    );
+    return {
+      type: "industrialBuilding",
+      x: x,
+      y: world.groundLevelY - buildingHeight,
+      width: buildingWidth,
+      height: buildingHeight,
+      colors: Palettes.industrial.buildings,
+      accentColors: Palettes.industrial.metal,
+    };
+  }
+  static generateIndustrialMid(x, y, baseColor, game, world) {
+    if (Math.random() < 0.4) {
+      const crateSize = getRandomInt(15, 30);
+      return {
+        type: "rect",
+        x: x,
+        y: world.groundLevelY - crateSize,
+        width: crateSize,
+        height: crateSize,
+        color: getRandomColor(Palettes.desert.slice(1, 3)),
+      };
+    } else {
+      const pipeLength = getRandomInt(30, 80);
+      const pipeThickness = getRandomInt(5, 10);
+      return {
+        type: "rect",
+        x: x,
+        y: world.groundLevelY - pipeThickness - getRandomInt(0, 30),
+        width: pipeLength,
+        height: pipeThickness,
+        color: getRandomColor(Palettes.industrial.metal),
+      };
+    }
+  }
+  static generateIndustrialGround(x, y, baseColor, game, world) {
+    let color;
+    const r = Math.random();
+    if (r < 0.6) color = Palettes.industrial.metal[0];
+    else if (r < 0.8) color = Palettes.industrial.buildings[3];
+    else color = Palettes.desert[2];
+    return {
+      type: "rect",
+      x: x,
+      y: world.groundLevelY,
+      width: Config.CANVAS_WIDTH * 0.5 + getRandomInt(0, 10),
+      height: 70,
+      color: color,
+    };
+  }
+  drawElement(ctx, element) {
+    if (element.type === "rect") {
+      drawPixelRect(
+        ctx,
+        element.x,
+        element.y,
+        element.width,
+        element.height,
+        element.color
+      );
+      return;
+    }
+    if (element.type === "cactus") {
+      drawPixelRect(
+        ctx,
+        element.x,
+        element.y,
+        element.width,
+        element.height,
+        element.color
+      );
+      const armWidth = element.width * 0.75;
+      const armHeight = element.height * 0.4;
+      if (element.height > 25) {
+        drawPixelRect(
+          ctx,
+          element.x - armWidth,
+          element.y + element.height * 0.2,
+          armWidth,
+          armHeight * 0.5,
+          element.color
+        );
+        drawPixelRect(
+          ctx,
+          element.x + element.width,
+          element.y + element.height * 0.3,
+          armWidth,
+          armHeight * 0.5,
+          element.color
+        );
+      }
+      return;
+    }
+    if (element.type === "pixelCloud") {
+      const blockSize = 5;
+      for (let i = 0; i < element.width / blockSize; i++) {
+        for (let j = 0; j < element.height / blockSize; j++) {
+          if (Math.random() > 0.25) {
+            drawPixelRect(
+              ctx,
+              element.x + i * blockSize,
+              element.y + j * blockSize,
+              blockSize,
+              blockSize,
+              (i + j) % 2 === 0 ? element.color : element.blockColor
+            );
+          }
+        }
+      }
+      return;
+    }
+    if (element.type === "pixelStructure") {
+      const structBlockSize = Math.max(5, Math.floor(element.width / 10));
+      for (let i = 0; i < element.width / structBlockSize; i++) {
+        for (let j = 0; j < element.height / structBlockSize; j++) {
+          if (
+            Math.random() < element.density &&
+            element.height - j * structBlockSize >
+              Math.random() * element.height * 0.6
+          ) {
+            drawPixelRect(
+              ctx,
+              element.x + i * structBlockSize,
+              element.y + j * structBlockSize,
+              structBlockSize,
+              structBlockSize,
+              getRandomColor(element.colors)
+            );
+          }
+        }
+      }
+      return;
+    }
+    if (element.type === "pixelTree") {
+      drawPixelRect(
+        ctx,
+        element.x + element.leavesWidth / 2 - element.trunkWidth / 2,
+        element.y + element.leavesHeight,
+        element.trunkWidth,
+        element.trunkHeight,
+        element.trunkColor
+      );
+      drawPixelRect(
+        ctx,
+        element.x,
+        element.y,
+        element.leavesWidth,
+        element.leavesHeight,
+        element.leavesColor
+      );
+      drawPixelRect(
+        ctx,
+        element.x + 2,
+        element.y + 2,
+        element.leavesWidth - 4,
+        element.leavesHeight - 4,
+        lightenDarkenColor(element.leavesColor, -30)
+      );
+      return;
+    }
+    if (element.type === "futuristicTower") {
+      const baseColor = element.colors[getRandomInt(0, 1)];
+      drawPixelRect(
+        ctx,
+        element.x,
+        element.y,
+        element.width,
+        element.height,
+        baseColor
+      );
+      const numLights = getRandomInt(
+        Math.floor(element.height / 20),
+        Math.floor(element.height / 10)
+      );
+      for (let i = 0; i < numLights; i++) {
+        if (Math.random() < 0.7) {
+          const lightX =
+            element.x +
+            getRandomInt(
+              Math.floor(element.width * 0.1),
+              Math.floor(element.width * 0.9) - 2
+            );
+          const lightY =
+            element.y +
+            getRandomInt(
+              Math.floor(element.height * 0.1),
+              Math.floor(element.height * 0.9) - 2
+            );
+          const lightSize = getRandomInt(1, 3);
+          drawPixelRect(
+            ctx,
+            lightX,
+            lightY,
+            lightSize,
+            lightSize,
+            getRandomColor(element.lightColors)
+          );
+        }
+      }
+      drawPixelRect(
+        ctx,
+        element.x + element.width * 0.2,
+        element.y - 5,
+        element.width * 0.6,
+        5,
+        getRandomColor(element.lightColors)
+      );
+      return;
+    }
+    if (element.type === "glowingOrb") {
+      ctx.globalAlpha = 0.5;
+      drawPixelRect(
+        ctx,
+        element.x - element.radius,
+        element.y - element.radius,
+        element.radius * 2,
+        element.radius * 2,
+        element.color
+      );
+      ctx.globalAlpha = 1.0;
+      drawPixelRect(
+        ctx,
+        element.x - element.radius * 0.6,
+        element.y - element.radius * 0.6,
+        element.radius * 1.2,
+        element.radius * 1.2,
+        lightenDarkenColor(element.color, 50)
+      );
+      return;
+    }
+    if (element.type === "industrialBuilding") {
+      const mainColor = getRandomColor(element.colors);
+      drawPixelRect(
+        ctx,
+        element.x,
+        element.y,
+        element.width,
+        element.height,
+        mainColor
+      );
+      const numFeatures = getRandomInt(2, 5);
+      for (let i = 0; i < numFeatures; i++) {
+        if (Math.random() < 0.8) {
+          const featureX =
+            element.x +
+            getRandomInt(
+              Math.floor(element.width * 0.1),
+              Math.floor(element.width * 0.8)
+            );
+          const featureY =
+            element.y +
+            getRandomInt(
+              Math.floor(element.height * 0.1),
+              Math.floor(element.height * 0.8)
+            );
+          const featureW = getRandomInt(5, 15);
+          const featureH = getRandomInt(5, 10);
+          drawPixelRect(
+            ctx,
+            featureX,
+            featureY,
+            featureW,
+            featureH,
+            lightenDarkenColor(mainColor, -40)
+          );
+        }
+      }
+      drawPixelRect(
+        ctx,
+        element.x,
+        element.y - 3,
+        element.width,
+        3,
+        getRandomColor(element.accentColors)
+      );
+      return;
+    }
+  }
+  initLayers(theme) {
+    this.layers = [];
+    const layerConfigs = {
+      desert_start: [
+        { speed: 0.05, generator: World.generateDesertDistant, count: 10 },
+        { speed: 0.15, generator: World.generateDesertDistant, count: 15 },
+        { speed: 0.4, generator: World.generateDesertMid, count: 20 },
+        { speed: 1.0, generator: World.generateDesertGround, count: 6 },
+      ],
+      gaming: [
+        { speed: 0.08, generator: World.generateGamingSkyElement, count: 15 },
+        { speed: 0.25, generator: World.generateGamingDistant, count: 12 },
+        { speed: 0.6, generator: World.generateGamingMid, count: 25 },
+        { speed: 1.0, generator: World.generateGamingGround, count: 6 },
+      ],
+      futuristic: [
+        {
+          speed: 0.06,
+          generator: World.generateFuturisticSkyElement,
+          count: 20,
+        },
+        { speed: 0.15, generator: World.generateFuturisticDistant, count: 15 },
+        { speed: 0.5, generator: World.generateFuturisticMid, count: 20 },
+        { speed: 1.0, generator: World.generateFuturisticGround, count: 6 },
+      ],
+      industrial: [
+        {
+          speed: 0.1,
+          generator: World.generateIndustrialSkyElement,
+          count: 15,
+        },
+        { speed: 0.25, generator: World.generateIndustrialDistant, count: 12 },
+        { speed: 0.6, generator: World.generateIndustrialMid, count: 20 },
+        { speed: 1.0, generator: World.generateIndustrialGround, count: 6 },
+      ],
+    };
+    const config = layerConfigs[theme] || layerConfigs["desert_start"];
+    config.forEach((lc) => {
+      this.layers.push(
+        new ParallaxLayer(lc.speed, "", lc.generator, lc.count, this.game, this)
+      );
+    });
+  }
+  handleThemeChange(newThemeData) {
+    if (
+      this.transitionTargetTheme !== newThemeData.theme &&
+      !this.isTransitioning
+    ) {
+      if (this.currentTheme !== newThemeData.theme) {
+        if (Config.DEBUG_MODE)
+          console.log(
+            `Starting transition from ${this.currentTheme} (layers) to ${newThemeData.theme}`
+          );
+        this.isTransitioning = true;
+        this.transitionProgress = 0;
+        this.transitionSourceSky = this.skyColor;
+        this.transitionTargetSky = newThemeData.skyColor;
+        this.transitionSourceTheme = this.currentTheme;
+        this.transitionTargetTheme = newThemeData.theme;
+        this.switchedLayersForCurrentTransition = false;
+      }
+    } else if (
+      !this.isTransitioning &&
+      this.currentTheme === newThemeData.theme
+    ) {
+      this.skyColor = newThemeData.skyColor;
+    }
+  }
+  update(worldScrollSpeed) {
+    this.worldX += worldScrollSpeed;
+    const currentZoneInfo = StopsManager.getCurrentZone(this.worldX);
+    this.handleThemeChange(currentZoneInfo);
+    if (this.isTransitioning) {
+      if (this.transitionDurationWorldUnits > 0 && worldScrollSpeed !== 0) {
+        const progressIncrement =
+          Math.abs(worldScrollSpeed) / this.transitionDurationWorldUnits;
+        this.transitionProgress += progressIncrement;
+      } else if (this.transitionDurationWorldUnits === 0) {
+        this.transitionProgress = 1;
+      }
+      this.transitionProgress = Math.min(this.transitionProgress, 1);
+      this.skyColor = interpolateColor(
+        this.transitionSourceSky,
+        this.transitionTargetSky,
+        this.transitionProgress
+      );
+      if (
+        this.transitionProgress >= 0.5 &&
+        !this.switchedLayersForCurrentTransition
+      ) {
+        if (Config.DEBUG_MODE)
+          console.log(
+            `Transition midpoint: Switching layers from ${this.currentTheme} to ${this.transitionTargetTheme}`
+          );
+        this.currentTheme = this.transitionTargetTheme;
+        this.initLayers(this.currentTheme);
+        this.switchedLayersForCurrentTransition = true;
+      }
+      if (this.transitionProgress >= 1) {
+        if (Config.DEBUG_MODE)
+          console.log(`Transition to ${this.transitionTargetTheme} complete.`);
+        this.isTransitioning = false;
+        this.currentTheme = this.transitionTargetTheme;
+        this.skyColor = this.transitionTargetSky;
+        if (!this.switchedLayersForCurrentTransition) {
+          this.initLayers(this.currentTheme);
+        }
+        this.transitionTargetTheme = this.currentTheme;
+      }
+    } else {
+      if (this.currentTheme !== currentZoneInfo.theme) {
+        this.currentTheme = currentZoneInfo.theme;
+        this.initLayers(this.currentTheme);
+      }
+      this.skyColor = currentZoneInfo.skyColor;
+    }
+    this.layers.forEach((layer) => layer.update(worldScrollSpeed));
+  }
+  render(ctx) {
+    ctx.fillStyle = this.skyColor;
+    ctx.fillRect(0, 0, Config.CANVAS_WIDTH, Config.CANVAS_HEIGHT);
+    this.layers.forEach((layer) => layer.render(ctx));
+    if (Config.DEBUG_MODE) {
+      ctx.fillStyle = "white";
+      ctx.font = "12px Courier New";
+      ctx.textAlign = "left";
+      ctx.fillText(`WorldX: ${this.worldX.toFixed(0)}`, 10, 60);
+      let themeStatus = `Theme: ${this.currentTheme}`;
+      if (this.isTransitioning) {
+        themeStatus += ` (T: ${this.transitionTargetTheme} ${Math.round(
+          this.transitionProgress * 100
+        )}%)`;
+      }
+      ctx.fillText(themeStatus, 10, 75);
+    }
+  }
+}
+
+
+---

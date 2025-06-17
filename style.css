@@ -1,0 +1,19 @@
+body {
+  margin: 0;
+  background-color: #333;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  font-family: "Courier New", Courier, monospace; /* Pixel-friendly font */
+}
+
+#game-container {
+  border: 2px solid #555;
+  box-shadow: 0 0 15px rgba(0, 0, 0, 0.5);
+  /* Dimensions will be set by JavaScript based on config */
+}
+
+canvas {
+  display: block; /* Removes extra space below canvas */
+}
