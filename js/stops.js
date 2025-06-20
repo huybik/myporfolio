@@ -280,10 +280,16 @@ const StopsManager = {
   activeStop: null,
   stopActivationRange: 100,
   init() {
+    // Increased worldPositionX for stops to create more distance between them.
+    // Original: 1500, 3500, 5500
+    // New: Using a larger delta, e.g., 4000-5000 between stops.
+    const initialStopPosition = 2500; // Start first stop further out
+    const distanceBetweenStops = 4500; // Increased distance
+
     this.stops = [
       {
         id: "project_ai_game",
-        worldPositionX: 1500,
+        worldPositionX: initialStopPosition,
         theme: "gaming",
         linkURL: "https://example.com/ai-game-project",
         promptText: "Press [F] for AI Game Project",
@@ -293,7 +299,7 @@ const StopsManager = {
       },
       {
         id: "project_ai_ta",
-        worldPositionX: 3500,
+        worldPositionX: initialStopPosition + distanceBetweenStops, // e.g., 2500 + 4500 = 7000
         theme: "futuristic",
         linkURL: "https://example.com/ai-ta-project",
         promptText: "Press [F] for AI TA Project",
@@ -303,7 +309,7 @@ const StopsManager = {
       },
       {
         id: "project_truck_parts",
-        worldPositionX: 5500,
+        worldPositionX: initialStopPosition + 2 * distanceBetweenStops, // e.g., 7000 + 4500 = 11500
         theme: "industrial",
         linkURL: "https://example.com/truck-parts-project",
         promptText: "Press [F] for Truck Parts Project",
@@ -372,23 +378,29 @@ const StopsManager = {
   },
   getCurrentZone(worldCurrentX) {
     let currentZone = {
-      name: "The Wasteland",
+      name: "The Wasteland", // Default starting zone name
       theme: "desert_start",
       skyColor: Palettes.desert[4],
     };
+
+    // Determine the zone entry position. This is when the transition *starts*.
+    // It's calculated as some distance *before* the actual stop marker.
+    // Original: Config.CANVAS_WIDTH * 0.75 (for stop area) + Config.CANVAS_WIDTH * 0.5 (for pre-zone buffer)
+    // This is 1.25 * Config.CANVAS_WIDTH before the stop.
+    const zoneEntryLeadDistance = Config.CANVAS_WIDTH * 1.25;
+
     for (let i = this.stops.length - 1; i >= 0; i--) {
       const stop = this.stops[i];
-      const zoneEntryPosition =
-        stop.worldPositionX -
-        Config.CANVAS_WIDTH * 0.75 -
-        Config.CANVAS_WIDTH * 0.5;
-      if (worldCurrentX > zoneEntryPosition) {
-        let skyColor = Palettes.desert[4];
+      const zoneEntryPosition = stop.worldPositionX - zoneEntryLeadDistance;
+
+      if (worldCurrentX >= zoneEntryPosition) {
+        let skyColor = Palettes.desert[4]; // Default sky
         if (stop.theme === "gaming") skyColor = Palettes.gaming.sky[0];
         else if (stop.theme === "futuristic")
           skyColor = Palettes.futuristic.sky[0];
         else if (stop.theme === "industrial")
           skyColor = Palettes.industrial.sky[0];
+
         currentZone = {
           name: `${
             stop.theme.charAt(0).toUpperCase() + stop.theme.slice(1)
@@ -399,19 +411,21 @@ const StopsManager = {
         break;
       }
     }
-    if (
-      this.stops.length > 0 &&
-      worldCurrentX <
-        this.stops[0].worldPositionX -
-          Config.CANVAS_WIDTH * 0.75 -
-          Config.CANVAS_WIDTH * 0.5
-    ) {
-      currentZone = {
-        name: "Desert Drive",
-        theme: "desert_start",
-        skyColor: Palettes.desert[4],
-      };
+
+    // If before the first stop's zone entry point, ensure it's the starting desert theme.
+    if (this.stops.length > 0) {
+      const firstStop = this.stops[0];
+      const firstZoneEntryPosition =
+        firstStop.worldPositionX - zoneEntryLeadDistance;
+      if (worldCurrentX < firstZoneEntryPosition) {
+        currentZone = {
+          name: "Desert Drive", // Initial zone name before first themed area
+          theme: "desert_start",
+          skyColor: Palettes.desert[4],
+        };
+      }
     }
+
     return currentZone;
   },
 };

@@ -26,6 +26,30 @@
 
 
 ---
+./style.css
+---
+body {
+  margin: 0;
+  background-color: #333;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  font-family: "Courier New", Courier, monospace; /* Pixel-friendly font */
+}
+
+#game-container {
+  border: 2px solid #555;
+  box-shadow: 0 0 15px rgba(0, 0, 0, 0.5);
+  /* Dimensions will be set by JavaScript based on config */
+}
+
+canvas {
+  display: block; /* Removes extra space below canvas */
+}
+
+
+---
 ./js/config.js
 ---
 // js/config.js
@@ -1079,7 +1103,6 @@ function interpolateColor(hex1, hex2, factor) {
 ---
 ./js/world.js
 ---
-// js/world.js
 class ParallaxLayer {
   constructor(
     scrollSpeedFactor,
@@ -1088,7 +1111,9 @@ class ParallaxLayer {
     elementCount,
     game,
     world,
-    layerType
+    layerType,
+    isSourceLayer = false,
+    initialXOffset = 0
   ) {
     this.scrollSpeedFactor = scrollSpeedFactor;
     this.color = color;
@@ -1096,17 +1121,17 @@ class ParallaxLayer {
     this.elementCount = elementCount;
     this.game = game;
     this.world = world;
+    this.layerType = layerType;
+    this.isSourceLayer = isSourceLayer;
+    this.initialXOffset = initialXOffset;
     this.elements = [];
-    this.layerType = layerType; // Store layer type (e.g., 'sky', 'distant', 'mid', 'ground')
-    this.targetTheme = null; // Theme to transition to
-    this.transitionProgress = 0; // Progress of transition (0 to 1)
     this.generateInitialElements();
   }
 
   generateInitialElements() {
     this.elements = [];
     for (let i = 0; i < this.elementCount; i++) {
-      const x = Math.random() * Config.CANVAS_WIDTH * 2.5;
+      const x = this.initialXOffset + Math.random() * Config.CANVAS_WIDTH * 2.5;
       const y = Math.random() * Config.CANVAS_HEIGHT;
       this.elements.push(
         this.elementGenerator(x, y, this.color, this.game, this.world)
@@ -1114,49 +1139,33 @@ class ParallaxLayer {
     }
   }
 
-  setTransition(targetTheme, transitionProgress) {
-    this.targetTheme = targetTheme;
-    this.transitionProgress = transitionProgress;
-  }
-
   update(worldScrollSpeed) {
-    this.elements.forEach((element, index) => {
-      element.x -= worldScrollSpeed * this.scrollSpeedFactor;
-      const elementVisualWidth =
-        element.width || (element.radius ? element.radius * 2 : 50);
-      const wrapBuffer = Config.CANVAS_WIDTH * 0.5;
-      const totalVirtualWidth = Config.CANVAS_WIDTH * 2.5;
-
-      if (worldScrollSpeed > 0) {
-        if (element.x + elementVisualWidth < -wrapBuffer) {
-          if (this.targetTheme && Math.random() < this.transitionProgress) {
-            // Replace with an element from the target theme
-            const newX = element.x + totalVirtualWidth + Math.random() * 50;
-            const newElement = World.layerGenerators[this.targetTheme][
-              this.layerType
-            ](newX, element.y, this.color, this.game, this.world);
-            this.elements[index] = newElement;
-          } else {
-            // Normal wrapping
+    if (this.isSourceLayer) {
+      // Remove elements that have moved off-screen to the left
+      this.elements = this.elements.filter((element) => {
+        const elementVisualWidth =
+          element.width || (element.radius ? element.radius * 2 : 50);
+        return element.x + elementVisualWidth >= -50;
+      });
+    } else {
+      // Normal wrapping for non-source layers
+      this.elements.forEach((element) => {
+        element.x -= worldScrollSpeed * this.scrollSpeedFactor;
+        const elementVisualWidth =
+          element.width || (element.radius ? element.radius * 2 : 50);
+        const wrapBuffer = Config.CANVAS_WIDTH * 0.5;
+        const totalVirtualWidth = Config.CANVAS_WIDTH * 2.5;
+        if (worldScrollSpeed > 0) {
+          if (element.x + elementVisualWidth < -wrapBuffer) {
             element.x += totalVirtualWidth + Math.random() * 50;
           }
-        }
-      } else if (worldScrollSpeed < 0) {
-        if (element.x > Config.CANVAS_WIDTH + wrapBuffer) {
-          if (this.targetTheme && Math.random() < this.transitionProgress) {
-            // Replace with an element from the target theme
-            const newX = element.x - totalVirtualWidth - Math.random() * 50;
-            const newElement = World.layerGenerators[this.targetTheme][
-              this.layerType
-            ](newX, element.y, this.color, this.game, this.world);
-            this.elements[index] = newElement;
-          } else {
-            // Normal wrapping
+        } else if (worldScrollSpeed < 0) {
+          if (element.x > Config.CANVAS_WIDTH + wrapBuffer) {
             element.x -= totalVirtualWidth + Math.random() * 50;
           }
         }
-      }
-    });
+      });
+    }
   }
 
   render(ctx) {
@@ -1188,11 +1197,40 @@ class World {
     this.transitionTargetSky = this.skyColor;
     this.transitionSourceTheme = this.currentTheme;
     this.transitionTargetTheme = this.currentTheme;
+    this.sourceLayers = null;
+    this.targetLayers = null;
+    this.bufferDistance = Config.CANVAS_WIDTH * 0.5; // Buffer zone distance
     this.initLayers(this.currentTheme);
     if (Config.DEBUG_MODE) console.log("World initialized.");
   }
 
-  // Static mapping of themes to layer generators
+  static layerConfigs = {
+    desert_start: [
+      { type: "distant", speed: 0.05, count: 10 },
+      { type: "distant", speed: 0.15, count: 15 },
+      { type: "mid", speed: 0.4, count: 20 },
+      { type: "ground", speed: 1.0, count: 6 },
+    ],
+    gaming: [
+      { type: "sky", speed: 0.08, count: 15 },
+      { type: "distant", speed: 0.25, count: 12 },
+      { type: "mid", speed: 0.6, count: 25 },
+      { type: "ground", speed: 1.0, count: 6 },
+    ],
+    futuristic: [
+      { type: "sky", speed: 0.06, count: 20 },
+      { type: "distant", speed: 0.15, count: 15 },
+      { type: "mid", speed: 0.5, count: 20 },
+      { type: "ground", speed: 1.0, count: 6 },
+    ],
+    industrial: [
+      { type: "sky", speed: 0.1, count: 15 },
+      { type: "distant", speed: 0.25, count: 12 },
+      { type: "mid", speed: 0.6, count: 20 },
+      { type: "ground", speed: 1.0, count: 6 },
+    ],
+  };
+
   static layerGenerators = {
     desert_start: {
       distant: World.generateDesertDistant,
@@ -1219,7 +1257,6 @@ class World {
     },
   };
 
-  // Desert theme generators
   static generateDesertDistant(x, y, baseColor, game, world) {
     const width = getRandomInt(20, 40);
     const height = getRandomInt(50, 100);
@@ -1269,7 +1306,6 @@ class World {
     };
   }
 
-  // Gaming theme generators
   static generateGamingSkyElement(x, y, baseColor, game, world) {
     const cloudWidth = getRandomInt(30, 70);
     const cloudHeight = getRandomInt(15, 30);
@@ -1346,7 +1382,6 @@ class World {
     };
   }
 
-  // Futuristic theme generators
   static generateFuturisticSkyElement(x, y, baseColor, game, world) {
     if (Math.random() < 0.7) {
       const size = getRandomInt(10, 40);
@@ -1433,7 +1468,6 @@ class World {
     };
   }
 
-  // Industrial theme generators
   static generateIndustrialSkyElement(x, y, baseColor, game, world) {
     if (Math.random() < 0.5) {
       const stackWidth = getRandomInt(8, 20);
@@ -1525,7 +1559,6 @@ class World {
     };
   }
 
-  // Element drawing method
   drawElement(ctx, element) {
     if (element.type === "rect") {
       drawPixelRect(
@@ -1757,33 +1790,8 @@ class World {
 
   initLayers(theme) {
     this.layers = [];
-    const layerConfigs = {
-      desert_start: [
-        { type: "distant", speed: 0.05, count: 10 },
-        { type: "distant", speed: 0.15, count: 15 },
-        { type: "mid", speed: 0.4, count: 20 },
-        { type: "ground", speed: 1.0, count: 6 },
-      ],
-      gaming: [
-        { type: "sky", speed: 0.08, count: 15 },
-        { type: "distant", speed: 0.25, count: 12 },
-        { type: "mid", speed: 0.6, count: 25 },
-        { type: "ground", speed: 1.0, count: 6 },
-      ],
-      futuristic: [
-        { type: "sky", speed: 0.06, count: 20 },
-        { type: "distant", speed: 0.15, count: 15 },
-        { type: "mid", speed: 0.5, count: 20 },
-        { type: "ground", speed: 1.0, count: 6 },
-      ],
-      industrial: [
-        { type: "sky", speed: 0.1, count: 15 },
-        { type: "distant", speed: 0.25, count: 12 },
-        { type: "mid", speed: 0.6, count: 20 },
-        { type: "ground", speed: 1.0, count: 6 },
-      ],
-    };
-    const config = layerConfigs[theme] || layerConfigs["desert_start"];
+    const config =
+      World.layerConfigs[theme] || World.layerConfigs["desert_start"];
     config.forEach((lc) => {
       this.layers.push(
         new ParallaxLayer(
@@ -1793,29 +1801,47 @@ class World {
           lc.count,
           this.game,
           this,
-          lc.type // Pass layer type to ParallaxLayer
+          lc.type,
+          false,
+          0
         )
       );
     });
   }
 
   handleThemeChange(newThemeData) {
-    if (
-      this.transitionTargetTheme !== newThemeData.theme &&
-      !this.isTransitioning
-    ) {
-      if (this.currentTheme !== newThemeData.theme) {
-        if (Config.DEBUG_MODE)
-          console.log(
-            `Starting transition from ${this.currentTheme} to ${newThemeData.theme}`
-          );
-        this.isTransitioning = true;
-        this.transitionProgress = 0;
-        this.transitionSourceSky = this.skyColor;
-        this.transitionTargetSky = newThemeData.skyColor;
-        this.transitionSourceTheme = this.currentTheme;
-        this.transitionTargetTheme = newThemeData.theme;
-      }
+    if (this.currentTheme !== newThemeData.theme && !this.isTransitioning) {
+      this.isTransitioning = true;
+      this.transitionProgress = 0;
+      this.transitionSourceSky = this.skyColor;
+      this.transitionTargetSky = newThemeData.skyColor;
+      this.transitionSourceTheme = this.currentTheme;
+      this.transitionTargetTheme = newThemeData.theme;
+
+      this.sourceLayers = this.layers;
+      this.sourceLayers.forEach((layer) => {
+        layer.isSourceLayer = true;
+      });
+
+      this.targetLayers = [];
+      const config =
+        World.layerConfigs[this.transitionTargetTheme] ||
+        World.layerConfigs["desert_start"];
+      config.forEach((lc) => {
+        this.targetLayers.push(
+          new ParallaxLayer(
+            lc.speed,
+            "",
+            World.layerGenerators[this.transitionTargetTheme][lc.type],
+            lc.count,
+            this.game,
+            this,
+            lc.type,
+            false,
+            Config.CANVAS_WIDTH
+          )
+        );
+      });
     } else if (
       !this.isTransitioning &&
       this.currentTheme === newThemeData.theme
@@ -1830,6 +1856,9 @@ class World {
     this.handleThemeChange(currentZoneInfo);
 
     if (this.isTransitioning) {
+      this.sourceLayers.forEach((layer) => layer.update(worldScrollSpeed));
+      this.targetLayers.forEach((layer) => layer.update(worldScrollSpeed));
+
       if (this.transitionDurationWorldUnits > 0 && worldScrollSpeed !== 0) {
         const progressIncrement =
           Math.abs(worldScrollSpeed) / this.transitionDurationWorldUnits;
@@ -1838,43 +1867,35 @@ class World {
         this.transitionProgress = 1;
       }
       this.transitionProgress = Math.min(this.transitionProgress, 1);
+
       this.skyColor = interpolateColor(
         this.transitionSourceSky,
         this.transitionTargetSky,
         this.transitionProgress
       );
 
-      // Update layers with transition info
-      this.layers.forEach((layer) =>
-        layer.setTransition(this.transitionTargetTheme, this.transitionProgress)
-      );
-
       if (this.transitionProgress >= 1) {
-        if (Config.DEBUG_MODE)
-          console.log(`Transition to ${this.transitionTargetTheme} complete.`);
         this.isTransitioning = false;
         this.currentTheme = this.transitionTargetTheme;
         this.skyColor = this.transitionTargetSky;
-        this.transitionTargetTheme = this.currentTheme;
-        // Regenerate layers to ensure all elements match the new theme
-        this.initLayers(this.currentTheme);
+        this.layers = this.targetLayers;
+        this.sourceLayers = null;
+        this.targetLayers = null;
       }
     } else {
-      this.layers.forEach((layer) => layer.setTransition(null, 0)); // Reset transition state
-      if (this.currentTheme !== currentZoneInfo.theme) {
-        this.currentTheme = currentZoneInfo.theme;
-        this.initLayers(this.currentTheme);
-      }
-      this.skyColor = currentZoneInfo.skyColor;
+      this.layers.forEach((layer) => layer.update(worldScrollSpeed));
     }
-
-    this.layers.forEach((layer) => layer.update(worldScrollSpeed));
   }
 
   render(ctx) {
     ctx.fillStyle = this.skyColor;
     ctx.fillRect(0, 0, Config.CANVAS_WIDTH, Config.CANVAS_HEIGHT);
-    this.layers.forEach((layer) => layer.render(ctx));
+    if (this.isTransitioning) {
+      this.sourceLayers.forEach((layer) => layer.render(ctx));
+      this.targetLayers.forEach((layer) => layer.render(ctx));
+    } else {
+      this.layers.forEach((layer) => layer.render(ctx));
+    }
     if (Config.DEBUG_MODE) {
       ctx.fillStyle = "white";
       ctx.font = "12px Courier New";

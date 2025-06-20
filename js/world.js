@@ -1,4 +1,3 @@
-// js/world.js
 class ParallaxLayer {
   constructor(
     scrollSpeedFactor,
@@ -7,147 +6,78 @@ class ParallaxLayer {
     elementCount,
     game,
     world,
-    layerType // Added layerType
+    layerType,
+    isSourceLayer = false,
+    initialXOffset = 0
   ) {
     this.scrollSpeedFactor = scrollSpeedFactor;
-    this.color = color; // Base color, might not be used if generator handles themes
-    this.elementGenerator = elementGenerator; // Generator for the initial/current theme
+    this.color = color;
+    this.elementGenerator = elementGenerator;
     this.elementCount = elementCount;
     this.game = game;
     this.world = world;
+    this.layerType = layerType;
+    this.isSourceLayer = isSourceLayer;
+    this.initialXOffset = initialXOffset;
     this.elements = [];
-    this.layerType = layerType; // Store layer type (e.g., 'sky', 'distant', 'mid', 'ground')
-    this.targetTheme = null; // Theme to transition to
-    this.transitionProgress = 0; // Progress of transition (0 to 1)
     this.generateInitialElements();
   }
 
   generateInitialElements() {
     this.elements = [];
+    const virtualWidth = Config.CANVAS_WIDTH * 2.5;
     for (let i = 0; i < this.elementCount; i++) {
-      const x = Math.random() * Config.CANVAS_WIDTH * 2.5; // Spread elements wider
-      const y = Math.random() * Config.CANVAS_HEIGHT; // y will be adjusted by generator
+      const x = this.initialXOffset + Math.random() * virtualWidth;
+      const y = Math.random() * Config.CANVAS_HEIGHT;
       this.elements.push(
         this.elementGenerator(x, y, this.color, this.game, this.world)
       );
     }
   }
 
-  setTransition(targetTheme, transitionProgress) {
-    this.targetTheme = targetTheme;
-    this.transitionProgress = transitionProgress;
-  }
-
   update(worldScrollSpeed) {
-    this.elements.forEach((element, index) => {
+    this.elements.forEach((element) => {
       element.x -= worldScrollSpeed * this.scrollSpeedFactor;
-
-      const elementVisualWidth =
-        element.width || (element.radius ? element.radius * 2 : 50);
-      const wrapBuffer = Config.CANVAS_WIDTH * 0.5; // Generous buffer
-      const totalVirtualWidth = Config.CANVAS_WIDTH * 2.5; // Match initial spread
-
-      // Element scrolls off left, new one appears on right
-      if (
-        worldScrollSpeed > 0 &&
-        element.x + elementVisualWidth < -wrapBuffer
-      ) {
-        let generatorToUse = this.elementGenerator;
-        let themeForGenerator = this.world.currentTheme; // Default to current theme if not transitioning
-
-        if (
-          this.targetTheme &&
-          this.world.isTransitioning &&
-          this.world.transitionSourceTheme
-        ) {
-          if (Math.random() < this.transitionProgress) {
-            generatorToUse =
-              World.layerGenerators[this.targetTheme]?.[this.layerType];
-            themeForGenerator = this.targetTheme;
-          } else {
-            generatorToUse =
-              World.layerGenerators[this.world.transitionSourceTheme]?.[
-                this.layerType
-              ];
-            themeForGenerator = this.world.transitionSourceTheme;
-          }
-          // Fallback if a generator is missing for a theme/type
-          if (!generatorToUse) {
-            generatorToUse = this.elementGenerator;
-            themeForGenerator = this.world.currentTheme; // Or source theme of layer
-            if (Config.DEBUG_MODE)
-              console.warn(
-                `Missing generator for ${themeForGenerator}/${this.layerType}, falling back.`
-              );
-          }
-        }
-
-        const newX = element.x + totalVirtualWidth + Math.random() * 50; // Add some randomness to prevent exact patterns
-        // Ensure y is appropriate for the element type, or let generator handle it
-        const newY = element.y; // Or recalculate based on layerType/theme if needed
-        this.elements[index] = generatorToUse(
-          newX,
-          newY,
-          this.color,
-          this.game,
-          this.world
-        );
-      }
-      // Element scrolls off right, new one appears on left
-      else if (
-        worldScrollSpeed < 0 &&
-        element.x > Config.CANVAS_WIDTH + wrapBuffer
-      ) {
-        let generatorToUse = this.elementGenerator;
-        let themeForGenerator = this.world.currentTheme;
-
-        if (
-          this.targetTheme &&
-          this.world.isTransitioning &&
-          this.world.transitionSourceTheme
-        ) {
-          if (Math.random() < this.transitionProgress) {
-            generatorToUse =
-              World.layerGenerators[this.targetTheme]?.[this.layerType];
-            themeForGenerator = this.targetTheme;
-          } else {
-            generatorToUse =
-              World.layerGenerators[this.world.transitionSourceTheme]?.[
-                this.layerType
-              ];
-            themeForGenerator = this.world.transitionSourceTheme;
-          }
-          if (!generatorToUse) {
-            generatorToUse = this.elementGenerator;
-            themeForGenerator = this.world.currentTheme;
-            if (Config.DEBUG_MODE)
-              console.warn(
-                `Missing generator for ${themeForGenerator}/${this.layerType}, falling back.`
-              );
-          }
-        }
-
-        const newX = element.x - totalVirtualWidth - Math.random() * 50;
-        const newY = element.y;
-        this.elements[index] = generatorToUse(
-          newX,
-          newY,
-          this.color,
-          this.game,
-          this.world
-        );
-      }
     });
+
+    if (this.isSourceLayer) {
+      this.elements = this.elements.filter((element) => {
+        const elementVisualWidth =
+          element.width || (element.radius ? element.radius * 2 : 50);
+        return element.x + elementVisualWidth > -100; // Increased buffer for removal
+      });
+    } else {
+      const screenWidth = Config.CANVAS_WIDTH;
+      const wrapBuffer = screenWidth * 0.5;
+      const totalVirtualWidth = screenWidth * 2.5;
+
+      this.elements.forEach((element) => {
+        const elementVisualWidth =
+          element.width || (element.radius ? element.radius * 2 : 50);
+
+        if (worldScrollSpeed > 0) {
+          if (element.x + elementVisualWidth < -wrapBuffer) {
+            element.x += totalVirtualWidth;
+            element.x += Math.random() * 50 - 25;
+          }
+        } else if (worldScrollSpeed < 0) {
+          if (element.x > screenWidth + wrapBuffer) {
+            element.x -= totalVirtualWidth;
+            element.x += Math.random() * 50 - 25;
+          }
+        }
+      });
+    }
   }
 
   render(ctx) {
+    const renderBuffer = 100;
     this.elements.forEach((element) => {
       const elementVisualWidth =
         element.width || (element.radius ? element.radius * 2 : 50);
-      // Render if element is potentially visible (add some buffer)
       if (
-        element.x + elementVisualWidth > -Config.CANVAS_WIDTH * 0.25 &&
-        element.x < Config.CANVAS_WIDTH * 1.25
+        element.x + elementVisualWidth > -renderBuffer &&
+        element.x < Config.CANVAS_WIDTH + renderBuffer
       ) {
         this.world.drawElement(ctx, element);
       }
@@ -161,24 +91,49 @@ class World {
     this.layers = [];
     this.worldX = 0;
     this.groundLevelY = Config.CANVAS_HEIGHT - 70;
-
-    this.currentTheme = "desert_start"; // Initial theme
-    this.skyColor = Palettes.desert[4]; // Initial sky color
-
+    this.currentTheme = "desert_start";
+    this.skyColor = Palettes.desert[4];
     this.isTransitioning = false;
-    this.transitionProgress = 0; // 0 to 1
-    this.transitionDurationWorldUnits = Config.CANVAS_WIDTH * 1.5; // Distance over which transition occurs
-
-    this.transitionSourceTheme = this.currentTheme;
-    this.transitionTargetTheme = this.currentTheme;
+    this.transitionProgress = 0;
+    this.transitionDurationWorldUnits = Config.CANVAS_WIDTH * 1.0; // Duration of sky change etc.
     this.transitionSourceSky = this.skyColor;
     this.transitionTargetSky = this.skyColor;
-
-    this.initLayers(this.currentTheme);
+    this.transitionSourceTheme = this.currentTheme;
+    this.transitionTargetTheme = this.currentTheme;
+    this.sourceLayers = null;
+    this.targetLayers = null;
+    // this.bufferDistance = Config.CANVAS_WIDTH * 0.5; // Not directly used here anymore
+    this.layers = this.initLayers(this.currentTheme);
     if (Config.DEBUG_MODE) console.log("World initialized.");
   }
 
-  // Static mapping of themes to layer generators
+  static layerConfigs = {
+    desert_start: [
+      { type: "distant", speed: 0.05, count: 10 },
+      { type: "distant", speed: 0.15, count: 15 },
+      { type: "mid", speed: 0.4, count: 20 },
+      { type: "ground", speed: 1.0, count: 6 },
+    ],
+    gaming: [
+      { type: "sky", speed: 0.08, count: 15 },
+      { type: "distant", speed: 0.25, count: 12 },
+      { type: "mid", speed: 0.6, count: 25 },
+      { type: "ground", speed: 1.0, count: 6 },
+    ],
+    futuristic: [
+      { type: "sky", speed: 0.06, count: 20 },
+      { type: "distant", speed: 0.15, count: 15 },
+      { type: "mid", speed: 0.5, count: 20 },
+      { type: "ground", speed: 1.0, count: 6 },
+    ],
+    industrial: [
+      { type: "sky", speed: 0.1, count: 15 },
+      { type: "distant", speed: 0.25, count: 12 },
+      { type: "mid", speed: 0.6, count: 20 },
+      { type: "ground", speed: 1.0, count: 6 },
+    ],
+  };
+
   static layerGenerators = {
     desert_start: {
       distant: World.generateDesertDistant,
@@ -205,7 +160,6 @@ class World {
     },
   };
 
-  // Desert theme generators
   static generateDesertDistant(x, y, baseColor, game, world) {
     const width = getRandomInt(20, 40);
     const height = getRandomInt(50, 100);
@@ -255,7 +209,6 @@ class World {
     };
   }
 
-  // Gaming theme generators
   static generateGamingSkyElement(x, y, baseColor, game, world) {
     const cloudWidth = getRandomInt(30, 70);
     const cloudHeight = getRandomInt(15, 30);
@@ -315,14 +268,19 @@ class World {
 
   static generateGamingGround(x, y, baseColor, game, world) {
     const segmentWidth = 40;
-    const groundLayer = world.layers.find(
-      (l) =>
-        l.elementGenerator === World.generateGamingGround ||
-        (l.layerType === "ground" &&
-          (l.world.currentTheme === "gaming" ||
-            l.world.transitionTargetTheme === "gaming"))
-    );
-    const scrollFactor = groundLayer ? groundLayer.scrollSpeedFactor : 1.0;
+    let scrollFactor = 1.0;
+    const activeLayers = world.isTransitioning
+      ? world.targetLayers
+      : world.layers;
+    if (activeLayers && activeLayers.length > 0) {
+      const groundLayer = activeLayers.find(
+        (l) =>
+          l.layerType === "ground" &&
+          l.elementGenerator === World.generateGamingGround
+      );
+      if (groundLayer) scrollFactor = groundLayer.scrollSpeedFactor;
+    }
+
     return {
       type: "rect",
       x: x,
@@ -336,7 +294,6 @@ class World {
     };
   }
 
-  // Futuristic theme generators
   static generateFuturisticSkyElement(x, y, baseColor, game, world) {
     if (Math.random() < 0.7) {
       const size = getRandomInt(10, 40);
@@ -358,7 +315,7 @@ class World {
         y: getRandomInt(Config.CANVAS_HEIGHT * 0.1, Config.CANVAS_HEIGHT * 0.5),
         width: length,
         height: 1,
-        color: getRandomColor(Palettes.futuristic.lights.map((c) => `${c}33`)), // Transparent
+        color: getRandomColor(Palettes.futuristic.lights.map((c) => `${c}33`)),
       };
     }
   }
@@ -406,14 +363,18 @@ class World {
 
   static generateFuturisticGround(x, y, baseColor, game, world) {
     const panelWidth = 60;
-    const groundLayer = world.layers.find(
-      (l) =>
-        l.elementGenerator === World.generateFuturisticGround ||
-        (l.layerType === "ground" &&
-          (l.world.currentTheme === "futuristic" ||
-            l.world.transitionTargetTheme === "futuristic"))
-    );
-    const scrollFactor = groundLayer ? groundLayer.scrollSpeedFactor : 1.0;
+    let scrollFactor = 1.0;
+    const activeLayers = world.isTransitioning
+      ? world.targetLayers
+      : world.layers;
+    if (activeLayers && activeLayers.length > 0) {
+      const groundLayer = activeLayers.find(
+        (l) =>
+          l.layerType === "ground" &&
+          l.elementGenerator === World.generateFuturisticGround
+      );
+      if (groundLayer) scrollFactor = groundLayer.scrollSpeedFactor;
+    }
     return {
       type: "rect",
       x: x,
@@ -427,7 +388,6 @@ class World {
     };
   }
 
-  // Industrial theme generators
   static generateIndustrialSkyElement(x, y, baseColor, game, world) {
     if (Math.random() < 0.5) {
       const stackWidth = getRandomInt(8, 20);
@@ -438,7 +398,7 @@ class World {
       return {
         type: "rect",
         x: x,
-        y: world.groundLevelY - stackHeight - getRandomInt(50, 100), // Higher up
+        y: world.groundLevelY - stackHeight - getRandomInt(50, 100),
         width: stackWidth,
         height: stackHeight,
         color: Palettes.industrial.buildings[3],
@@ -487,7 +447,7 @@ class World {
         y: world.groundLevelY - crateSize,
         width: crateSize,
         height: crateSize,
-        color: getRandomColor(Palettes.desert.slice(1, 3)), // Re-using desert palette for wooden crates
+        color: getRandomColor(Palettes.desert.slice(1, 3)),
       };
     } else {
       const pipeLength = getRandomInt(30, 80);
@@ -506,9 +466,9 @@ class World {
   static generateIndustrialGround(x, y, baseColor, game, world) {
     let color;
     const r = Math.random();
-    if (r < 0.6) color = Palettes.industrial.metal[0]; // Concrete/metal look
-    else if (r < 0.8) color = Palettes.industrial.buildings[3]; // Darker ground
-    else color = Palettes.desert[2]; // Dirt patches
+    if (r < 0.6) color = Palettes.industrial.metal[0];
+    else if (r < 0.8) color = Palettes.industrial.buildings[3];
+    else color = Palettes.desert[2];
     return {
       type: "rect",
       x: x,
@@ -519,7 +479,6 @@ class World {
     };
   }
 
-  // Element drawing method
   drawElement(ctx, element) {
     if (element.type === "rect") {
       drawPixelRect(
@@ -544,7 +503,6 @@ class World {
       const armWidth = element.width * 0.75;
       const armHeight = element.height * 0.4;
       if (element.height > 25) {
-        // Only draw arms for taller cacti
         drawPixelRect(
           ctx,
           element.x - armWidth,
@@ -565,18 +523,17 @@ class World {
       return;
     }
     if (element.type === "pixelCloud") {
-      const blockSize = 5; // Size of each "pixel" in the cloud
+      const blockSize = 5;
       for (let i = 0; i < element.width / blockSize; i++) {
         for (let j = 0; j < element.height / blockSize; j++) {
           if (Math.random() > 0.25) {
-            // Sparseness
             drawPixelRect(
               ctx,
               element.x + i * blockSize,
               element.y + j * blockSize,
               blockSize,
               blockSize,
-              (i + j) % 2 === 0 ? element.color : element.blockColor // Simple pattern
+              (i + j) % 2 === 0 ? element.color : element.blockColor
             );
           }
         }
@@ -588,8 +545,7 @@ class World {
       for (let i = 0; i < element.width / structBlockSize; i++) {
         for (let j = 0; j < element.height / structBlockSize; j++) {
           if (
-            Math.random() < element.density && // Overall density
-            // Tapering effect: more blocks at bottom
+            Math.random() < element.density &&
             element.height - j * structBlockSize >
               Math.random() * element.height * 0.6
           ) {
@@ -607,7 +563,6 @@ class World {
       return;
     }
     if (element.type === "pixelTree") {
-      // Trunk
       drawPixelRect(
         ctx,
         element.x + element.leavesWidth / 2 - element.trunkWidth / 2,
@@ -616,7 +571,6 @@ class World {
         element.trunkHeight,
         element.trunkColor
       );
-      // Leaves main block
       drawPixelRect(
         ctx,
         element.x,
@@ -625,7 +579,6 @@ class World {
         element.leavesHeight,
         element.leavesColor
       );
-      // Leaves inner detail
       drawPixelRect(
         ctx,
         element.x + 2,
@@ -637,7 +590,7 @@ class World {
       return;
     }
     if (element.type === "futuristicTower") {
-      const baseColor = element.colors[getRandomInt(0, 1)]; // Pick one of the base building colors
+      const baseColor = element.colors[getRandomInt(0, 1)];
       drawPixelRect(
         ctx,
         element.x,
@@ -646,14 +599,12 @@ class World {
         element.height,
         baseColor
       );
-      // Add some "windows" or lights
       const numLights = getRandomInt(
         Math.floor(element.height / 20),
         Math.floor(element.height / 10)
       );
       for (let i = 0; i < numLights; i++) {
         if (Math.random() < 0.7) {
-          // Chance to draw a light
           const lightX =
             element.x +
             getRandomInt(
@@ -677,7 +628,6 @@ class World {
           );
         }
       }
-      // Top antenna/feature
       drawPixelRect(
         ctx,
         element.x + element.width * 0.2,
@@ -689,7 +639,7 @@ class World {
       return;
     }
     if (element.type === "glowingOrb") {
-      ctx.globalAlpha = 0.5; // Outer glow
+      ctx.globalAlpha = 0.5;
       drawPixelRect(
         ctx,
         element.x - element.radius,
@@ -698,7 +648,7 @@ class World {
         element.radius * 2,
         element.color
       );
-      ctx.globalAlpha = 1.0; // Core
+      ctx.globalAlpha = 1.0;
       drawPixelRect(
         ctx,
         element.x - element.radius * 0.6,
@@ -719,7 +669,6 @@ class World {
         element.height,
         mainColor
       );
-      // Add some features like vents or panels
       const numFeatures = getRandomInt(2, 5);
       for (let i = 0; i < numFeatures; i++) {
         if (Math.random() < 0.8) {
@@ -747,7 +696,6 @@ class World {
           );
         }
       }
-      // Roofline detail
       drawPixelRect(
         ctx,
         element.x,
@@ -760,126 +708,97 @@ class World {
     }
   }
 
-  initLayers(theme) {
-    this.layers = [];
-    const layerConfigs = {
-      desert_start: [
-        { type: "distant", speed: 0.05, count: 10 },
-        { type: "distant", speed: 0.15, count: 15 },
-        { type: "mid", speed: 0.4, count: 20 },
-        { type: "ground", speed: 1.0, count: 6 },
-      ],
-      gaming: [
-        { type: "sky", speed: 0.08, count: 15 },
-        { type: "distant", speed: 0.25, count: 12 },
-        { type: "mid", speed: 0.6, count: 25 },
-        { type: "ground", speed: 1.0, count: 6 },
-      ],
-      futuristic: [
-        { type: "sky", speed: 0.06, count: 20 },
-        { type: "distant", speed: 0.15, count: 15 },
-        { type: "mid", speed: 0.5, count: 20 },
-        { type: "ground", speed: 1.0, count: 6 },
-      ],
-      industrial: [
-        { type: "sky", speed: 0.1, count: 15 },
-        { type: "distant", speed: 0.25, count: 12 },
-        { type: "mid", speed: 0.6, count: 20 },
-        { type: "ground", speed: 1.0, count: 6 },
-      ],
-    };
-
-    const config = layerConfigs[theme] || layerConfigs["desert_start"]; // Fallback
-    const themeGenerators =
-      World.layerGenerators[theme] || World.layerGenerators["desert_start"];
-
+  initLayers(theme, initialXOffset = 0) {
+    const newLayers = [];
+    const config =
+      World.layerConfigs[theme] || World.layerConfigs["desert_start"];
     config.forEach((lc) => {
-      const generatorFunction = themeGenerators[lc.type];
-      if (!generatorFunction) {
-        if (Config.DEBUG_MODE)
-          console.warn(
-            `No generator for theme ${theme}, layer type ${lc.type}. Skipping layer.`
-          );
-        return;
-      }
-      this.layers.push(
+      newLayers.push(
         new ParallaxLayer(
           lc.speed,
-          "", // Color - less relevant now as generators pick from palettes
-          generatorFunction,
+          "",
+          World.layerGenerators[theme][lc.type],
           lc.count,
           this.game,
           this,
-          lc.type // Pass layer type
+          lc.type,
+          false,
+          initialXOffset
         )
       );
     });
+    return newLayers;
   }
 
   handleThemeChange(newThemeData) {
-    if (this.isTransitioning) {
-      // Already transitioning. Check if the target needs to change.
-      if (this.transitionTargetTheme !== newThemeData.theme) {
-        // Target changed mid-transition. Start a new one from current interpolated state.
-        if (Config.DEBUG_MODE)
-          console.log(
-            `World: Transition target changed from ${this.transitionTargetTheme} to ${newThemeData.theme}.`
-          );
+    if (this.currentTheme !== newThemeData.theme && !this.isTransitioning) {
+      if (Config.DEBUG_MODE)
+        console.log(
+          `Starting transition from ${this.currentTheme} to ${newThemeData.theme}`
+        );
+      this.isTransitioning = true;
+      this.transitionProgress = 0;
 
-        // The source theme for the new transition is the one we were *just* transitioning from,
-        // or the current fully established theme if the previous transition was very short.
-        // For simplicity, we use the current sky color as the source sky.
-        // The source *theme* for layer elements will be the `currentTheme` (last fully committed theme).
-        this.transitionSourceSky = this.skyColor; // Current interpolated sky is the new source sky
-        this.transitionSourceTheme = this.currentTheme; // The theme before this whole transition sequence started
+      this.transitionSourceSky = this.skyColor;
+      this.transitionTargetSky = newThemeData.skyColor;
+      this.transitionSourceTheme = this.currentTheme;
+      this.transitionTargetTheme = newThemeData.theme;
 
-        this.transitionTargetTheme = newThemeData.theme;
-        this.transitionTargetSky = newThemeData.skyColor;
-        this.transitionProgress = 0; // Restart progress for the new target.
+      this.sourceLayers = this.layers;
+      this.sourceLayers.forEach((layer) => {
+        layer.isSourceLayer = true;
+      });
 
-        if (Config.DEBUG_MODE)
-          console.log(
-            `World: New transition initiated: ${this.transitionSourceTheme} -> ${this.transitionTargetTheme}`
-          );
-      }
-      // If target is the same, do nothing, continue current transition.
-    } else {
-      // Not currently transitioning. Check if new theme is different from current settled theme.
-      if (this.currentTheme !== newThemeData.theme) {
-        // Need to start a new transition.
-        if (Config.DEBUG_MODE)
-          console.log(
-            `World: Starting transition from ${this.currentTheme} to ${newThemeData.theme}.`
-          );
-        this.isTransitioning = true;
-        this.transitionProgress = 0;
-        this.transitionSourceTheme = this.currentTheme;
-        this.transitionSourceSky = this.skyColor; // Sky color of the current (source) theme
-        this.transitionTargetTheme = newThemeData.theme;
-        this.transitionTargetSky = newThemeData.skyColor;
-      } else {
-        // Theme is the same, not transitioning. Just ensure sky color is correct.
-        this.skyColor = newThemeData.skyColor;
-      }
+      // Initialize new layers for the target theme, starting further off-screen to the right
+      // This creates a buffer where old assets can scroll off before new ones appear.
+      // Config.CANVAS_WIDTH * 1.5 means new assets start 1.5 screen widths away.
+      // They will become visible after player travels 0.5 screen widths into the transition.
+      const targetLayerInitialXOffset = Config.CANVAS_WIDTH * 1.5;
+      this.targetLayers = this.initLayers(
+        this.transitionTargetTheme,
+        targetLayerInitialXOffset
+      );
+    } else if (
+      !this.isTransitioning &&
+      this.currentTheme === newThemeData.theme
+    ) {
+      // This case handles if getCurrentZone returns the same theme but maybe a different sky color
+      // (though current getCurrentZone logic doesn't change sky for same theme)
+      this.skyColor = newThemeData.skyColor;
     }
   }
 
   update(worldScrollSpeed) {
     this.worldX += worldScrollSpeed;
     const currentZoneInfo = StopsManager.getCurrentZone(this.worldX);
-
     this.handleThemeChange(currentZoneInfo);
 
     if (this.isTransitioning) {
-      if (this.transitionDurationWorldUnits > 0 && worldScrollSpeed !== 0) {
-        // Progress is based on how much of the transition distance has been covered
-        this.transitionProgress +=
-          Math.abs(worldScrollSpeed) / this.transitionDurationWorldUnits;
-      } else if (this.transitionDurationWorldUnits === 0) {
-        // Instant transition
-        this.transitionProgress = 1;
+      if (this.sourceLayers) {
+        this.sourceLayers.forEach((layer) => layer.update(worldScrollSpeed));
       }
-      this.transitionProgress = Math.min(this.transitionProgress, 1); // Cap at 1
+      if (this.targetLayers) {
+        this.targetLayers.forEach((layer) => layer.update(worldScrollSpeed));
+      }
+
+      if (this.transitionDurationWorldUnits > 0 && worldScrollSpeed !== 0) {
+        const progressIncrement =
+          Math.abs(worldScrollSpeed) / this.transitionDurationWorldUnits;
+        this.transitionProgress += progressIncrement;
+      } else if (
+        this.transitionDurationWorldUnits === 0 &&
+        worldScrollSpeed !== 0
+      ) {
+        // Ensure progress if duration is 0 but moving
+        this.transitionProgress = 1;
+      } else if (
+        this.transitionDurationWorldUnits === 0 &&
+        worldScrollSpeed === 0
+      ) {
+        // If duration is 0 and not moving, do nothing to progress to avoid instant snap if player is idle at boundary
+      }
+
+      this.transitionProgress = Math.min(this.transitionProgress, 1);
 
       this.skyColor = interpolateColor(
         this.transitionSourceSky,
@@ -887,55 +806,38 @@ class World {
         this.transitionProgress
       );
 
-      // Inform layers about the ongoing transition
-      this.layers.forEach((layer) =>
-        layer.setTransition(this.transitionTargetTheme, this.transitionProgress)
-      );
-
       if (this.transitionProgress >= 1) {
-        // Transition complete
         if (Config.DEBUG_MODE)
-          console.log(
-            `World: Transition to ${this.transitionTargetTheme} complete.`
-          );
-        this.currentTheme = this.transitionTargetTheme;
-        this.skyColor = this.transitionTargetSky; // Ensure final color is exact
+          console.log(`Transition to ${this.transitionTargetTheme} complete.`);
         this.isTransitioning = false;
-        // this.transitionProgress = 0; // Reset for next potential transition
+        this.currentTheme = this.transitionTargetTheme;
+        this.skyColor = this.transitionTargetSky; // Ensure final sky color is set
+        this.layers = this.targetLayers; // Old sourceLayers are naturally culled by their update logic
 
-        // Regenerate layers to be purely the new theme
-        this.initLayers(this.currentTheme);
-        // New layers are created by initLayers, their internal transition state is reset.
+        this.sourceLayers = null;
+        this.targetLayers = null;
       }
     } else {
-      // Not transitioning. Ensure layers are not in a transition state.
-      // This is mostly for safety or if a transition was aborted.
-      // If initLayers was just called, new layers are already clean.
-      this.layers.forEach((layer) => layer.setTransition(null, 0));
-
-      // If currentTheme somehow differs from zone without transition (e.g. initial load, or error)
-      if (this.currentTheme !== currentZoneInfo.theme) {
-        if (Config.DEBUG_MODE)
-          console.warn(
-            `World: Mismatch! currentTheme=${this.currentTheme}, zoneTheme=${currentZoneInfo.theme} but not transitioning. Forcing sync.`
-          );
-        this.currentTheme = currentZoneInfo.theme;
-        this.skyColor = currentZoneInfo.skyColor;
-        this.initLayers(this.currentTheme); // Full switch
-      } else {
-        // If theme is same, ensure sky color is accurate (e.g. if it was default before first zone check)
-        this.skyColor = currentZoneInfo.skyColor;
-      }
+      // Not transitioning, just update current layers
+      this.layers.forEach((layer) => layer.update(worldScrollSpeed));
     }
-
-    this.layers.forEach((layer) => layer.update(worldScrollSpeed));
   }
 
   render(ctx) {
     ctx.fillStyle = this.skyColor;
     ctx.fillRect(0, 0, Config.CANVAS_WIDTH, Config.CANVAS_HEIGHT);
 
-    this.layers.forEach((layer) => layer.render(ctx));
+    // Render active layers or transitioning layers
+    if (this.isTransitioning) {
+      if (this.sourceLayers) {
+        this.sourceLayers.forEach((layer) => layer.render(ctx));
+      }
+      if (this.targetLayers) {
+        this.targetLayers.forEach((layer) => layer.render(ctx));
+      }
+    } else {
+      this.layers.forEach((layer) => layer.render(ctx));
+    }
 
     if (Config.DEBUG_MODE) {
       ctx.fillStyle = "white";
@@ -944,9 +846,36 @@ class World {
       ctx.fillText(`WorldX: ${this.worldX.toFixed(0)}`, 10, 60);
       let themeStatus = `Theme: ${this.currentTheme}`;
       if (this.isTransitioning) {
-        themeStatus = `Transition: ${this.transitionSourceTheme} -> ${
-          this.transitionTargetTheme
-        } (${Math.round(this.transitionProgress * 100)}%)`;
+        themeStatus += ` (T: ${this.transitionTargetTheme} ${Math.round(
+          this.transitionProgress * 100
+        )}%)`;
+        if (this.sourceLayers)
+          ctx.fillText(
+            `Source Layers: ${this.sourceLayers.reduce(
+              (sum, l) => sum + l.elements.length,
+              0
+            )} elements`,
+            10,
+            90
+          );
+        if (this.targetLayers)
+          ctx.fillText(
+            `Target Layers: ${this.targetLayers.reduce(
+              (sum, l) => sum + l.elements.length,
+              0
+            )} elements`,
+            10,
+            105
+          );
+      } else {
+        ctx.fillText(
+          `Active Layers: ${this.layers.reduce(
+            (sum, l) => sum + l.elements.length,
+            0
+          )} elements`,
+          10,
+          90
+        );
       }
       ctx.fillText(themeStatus, 10, 75);
     }
