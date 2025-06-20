@@ -34,12 +34,22 @@ class ParallaxLayer {
           this.layerConfig.type.includes("stars") ||
           this.layerConfig.type.includes("nebulae"))
       ) {
-        y = getRandomFloat(0, this.world.groundLevelY * 0.6);
+        y = getRandomFloat(
+          Config.CANVAS_HEIGHT * 0.05,
+          this.world.groundLevelY * 0.55
+        ); // Adjusted Y for sky elements
       } else if (this.layerConfig.type === "foreground_debris") {
         y = getRandomFloat(
-          this.world.groundLevelY + 10,
-          Config.CANVAS_HEIGHT - 10
-        );
+          this.world.groundLevelY + 5,
+          Config.CANVAS_HEIGHT - 5
+        ); // Ensure fully in foreground
+      } else if (
+        this.layerConfig.type &&
+        (this.layerConfig.type.includes("mountain") ||
+          this.layerConfig.type.includes("distant"))
+      ) {
+        // For distant ground-based elements, y is often calculated relative to groundLevelY in the generator itself
+        y = this.world.groundLevelY; // Placeholder, generator will refine
       } else {
         y = Math.random() * Config.CANVAS_HEIGHT;
       }
@@ -82,11 +92,14 @@ class ParallaxLayer {
                   this.layerConfig.type.includes("stars") ||
                   this.layerConfig.type.includes("nebulae"))
               ) {
-                element.y = getRandomFloat(0, this.world.groundLevelY * 0.6);
+                element.y = getRandomFloat(
+                  Config.CANVAS_HEIGHT * 0.05,
+                  this.world.groundLevelY * 0.55
+                );
               } else if (this.layerConfig.type === "foreground_debris") {
                 element.y = getRandomFloat(
-                  this.world.groundLevelY + 10,
-                  Config.CANVAS_HEIGHT - 10
+                  this.world.groundLevelY + 5,
+                  Config.CANVAS_HEIGHT - 5
                 );
               }
             }
@@ -102,11 +115,14 @@ class ParallaxLayer {
                   this.layerConfig.type.includes("stars") ||
                   this.layerConfig.type.includes("nebulae"))
               ) {
-                element.y = getRandomFloat(0, this.world.groundLevelY * 0.6);
+                element.y = getRandomFloat(
+                  Config.CANVAS_HEIGHT * 0.05,
+                  this.world.groundLevelY * 0.55
+                );
               } else if (this.layerConfig.type === "foreground_debris") {
                 element.y = getRandomFloat(
-                  this.world.groundLevelY + 10,
-                  Config.CANVAS_HEIGHT - 10
+                  this.world.groundLevelY + 5,
+                  Config.CANVAS_HEIGHT - 5
                 );
               }
             }
@@ -183,7 +199,6 @@ class ParallaxLayer {
         }
 
         if (ctx.globalAlpha > 0.01) {
-          // Optimization: don't draw if fully transparent
           this.world.drawElement(
             ctx,
             element,
@@ -345,7 +360,7 @@ class World {
         speed: 1.5,
         count: 25,
         generator: World.generateForegroundDebris,
-        options: { types: ["glitch_cube", "wire"] },
+        options: { types: ["glitch_cube", "wire", "pixel_coin"] },
       },
     ],
     futuristic: [
@@ -411,7 +426,7 @@ class World {
         speed: 1.5,
         count: 20,
         generator: World.generateForegroundDebris,
-        options: { types: ["metal_shard", "glowing_bit"] },
+        options: { types: ["metal_shard", "glowing_bit", "circuit_piece"] },
       },
     ],
     industrial: [
@@ -461,16 +476,14 @@ class World {
         speed: 1.5,
         count: 35,
         generator: World.generateForegroundDebris,
-        options: { types: ["rubble", "rusty_pipe_fragment"] },
+        options: { types: ["rubble", "rusty_pipe_fragment", "gear"] },
       },
     ],
   };
 
   static getSideColor(objectPalette, sideType) {
-    // sideType: "base", "light", "shadow"
     if (!objectPalette || typeof objectPalette !== "object") {
-      // console.warn("getSideColor: Invalid objectPalette provided.", objectPalette);
-      return "#FF00FF"; // Magenta fallback for error
+      return "#FF00FF";
     }
     switch (sideType) {
       case "light":
@@ -512,23 +525,23 @@ class World {
       case "moon":
         radius = getRandomInt(25, 40);
         color = "#E0E0E0";
-        glowColor = "#FFFFFF";
+        glowColor = "#F0F0F0"; // Slightly brighter glow
         break;
       case "tech_moon":
         radius = getRandomInt(30, 45);
         color = Palettes.futuristic.objects_primary.base;
-        glowColor = Palettes.futuristic.emissive[0];
+        glowColor = Palettes.futuristic.emissive[0] + "AA"; // Semi-transparent glow
         break;
       case "glitch_moon":
         radius = getRandomInt(20, 35);
         color = Palettes.gaming.objects_accent[0];
-        glowColor = Palettes.gaming.emissive[1];
+        glowColor = Palettes.gaming.emissive[1] + "88"; // Semi-transparent glow
         break;
       case "sun":
       default:
         radius = getRandomInt(30, 50);
         color = Palettes.desert.emissive[0];
-        glowColor = lightenDarkenColor(Palettes.desert.emissive[0], 50);
+        glowColor = lightenDarkenColor(Palettes.desert.emissive[0], 50) + "CC"; // Stronger, semi-transparent glow
         break;
     }
     return {
@@ -620,7 +633,7 @@ class World {
         y: world.groundLevelY - mesaHeight - getRandomInt(0, 20),
         width: mesaWidth,
         height: mesaHeight,
-        colors: Palettes.desert.objects_primary, // Pass the whole object
+        colors: Palettes.desert.objects_primary,
         originalColor: Palettes.desert.objects_primary.base,
       };
     } else if (options.type === "mixed" && r < 0.8) {
@@ -704,12 +717,22 @@ class World {
         element.size = getRandomInt(10, 20);
         element.height = getRandomInt(1, 2);
         break;
+      case "pixel_coin": // New debris for gaming
+        element.color = Palettes.gaming.emissive[0]; // Yellow
+        element.size = getRandomInt(5, 8);
+        element.isEmissive = true;
+        break;
       case "metal_shard":
         element.color = Palettes.futuristic.objects_primary.base;
         break;
       case "glowing_bit":
         element.color = getRandomColor(Palettes.futuristic.emissive);
         element.isEmissive = true;
+        break;
+      case "circuit_piece": // New debris for futuristic
+        element.color = Palettes.futuristic.objects_accent[1]; // Teal
+        element.size = getRandomInt(6, 12);
+        element.height = getRandomInt(2, 4);
         break;
       case "rubble":
         element.color = getRandomColor(Palettes.industrial.ground.slice(1, 3));
@@ -718,6 +741,10 @@ class World {
         element.color = getRandomColor(Palettes.industrial.objects_accent);
         element.size = getRandomInt(10, 18);
         element.height = getRandomInt(3, 5);
+        break;
+      case "gear": // New debris for industrial
+        element.color = Palettes.industrial.objects_primary.shadow;
+        element.size = getRandomInt(7, 10);
         break;
     }
     element.originalColor = element.color;
@@ -740,7 +767,8 @@ class World {
         density: 0.6,
         originalColor: Palettes.gaming.objects_primary.base,
       };
-    } else {
+    } else if (r < 0.8) {
+      // Floating island type
       const width = getRandomInt(50, 100);
       const height = getRandomInt(20, 40);
       element = {
@@ -754,6 +782,19 @@ class World {
           bottom: Palettes.gaming.ground[3],
         },
         originalColor: Palettes.gaming.ground[2],
+      };
+    } else {
+      // Distant arcade machine silhouette
+      const width = getRandomInt(20, 30);
+      const height = getRandomInt(40, 60);
+      element = {
+        type: "rect", // Simple rect for silhouette
+        x: x,
+        y: world.groundLevelY - height - getRandomInt(20, 50),
+        width: width,
+        height: height,
+        color: Palettes.gaming.objects_primary.shadow,
+        originalColor: Palettes.gaming.objects_primary.shadow,
       };
     }
     element.canRandomizeYOnWrap = false;
@@ -820,7 +861,11 @@ class World {
     const colorIndex =
       Math.floor((x + world.worldX * scrollFactor) / segmentWidth) % 2;
     const baseColor = Palettes.gaming.ground[colorIndex];
-    const detailColors = [Palettes.gaming.ground[2], Palettes.gaming.ground[3]];
+    const detailColors = [
+      Palettes.gaming.ground[2],
+      Palettes.gaming.ground[3],
+      Palettes.gaming.emissive[2],
+    ]; // Added emissive for some details
     return {
       type: "textured_ground_rect",
       x: x,
@@ -836,20 +881,45 @@ class World {
   }
 
   static generateFuturisticSkyElement(x, y, layerConfig, game, world) {
-    const width = getRandomInt(20, 100);
-    const height = getRandomInt(2, 5);
-    const color = getRandomColor(Palettes.futuristic.emissive) + "66";
-    return {
-      type: "rect",
-      x,
-      y: getRandomFloat(20, Config.CANVAS_HEIGHT * 0.5),
-      width,
-      height,
-      color,
-      originalColor: color,
-      isEmissive: true,
-      canRandomizeYOnWrap: true,
-    };
+    const r = Math.random();
+    if (r < 0.7) {
+      // Flying drone/vehicle silhouette
+      const width = getRandomInt(15, 40);
+      const height = getRandomInt(5, 10);
+      const color = Palettes.futuristic.objects_primary.shadow + "AA"; // Semi-transparent silhouette
+      return {
+        type: "rect",
+        x,
+        y: getRandomFloat(
+          Config.CANVAS_HEIGHT * 0.1,
+          Config.CANVAS_HEIGHT * 0.4
+        ),
+        width,
+        height,
+        color,
+        originalColor: color,
+        canRandomizeYOnWrap: true,
+      };
+    } else {
+      // Energy beam/trail
+      const width = getRandomInt(50, 150);
+      const height = getRandomInt(1, 3);
+      const color = getRandomColor(Palettes.futuristic.emissive) + "66";
+      return {
+        type: "rect",
+        x,
+        y: getRandomFloat(
+          Config.CANVAS_HEIGHT * 0.1,
+          Config.CANVAS_HEIGHT * 0.5
+        ),
+        width,
+        height,
+        color,
+        originalColor: color,
+        isEmissive: true,
+        canRandomizeYOnWrap: true,
+      };
+    }
   }
   static generateFuturisticDistant(x, y, layerConfig, game, world) {
     const buildingWidth = getRandomInt(40, 90);
@@ -867,21 +937,43 @@ class World {
     };
   }
   static generateFuturisticMid(x, y, layerConfig, game, world) {
-    const platWidth = getRandomInt(50, 120);
-    const platHeight = getRandomInt(10, 25);
-    return {
-      type: "rect_platform",
-      x: x,
-      y: world.groundLevelY - platHeight - getRandomInt(10, 80),
-      width: platWidth,
-      height: platHeight,
-      colors: {
-        base: Palettes.futuristic.objects_primary.base,
-        trim: Palettes.futuristic.emissive[0],
-      },
-      originalColor: Palettes.futuristic.objects_primary.base,
-      canRandomizeYOnWrap: false,
-    };
+    const r = Math.random();
+    if (r < 0.6) {
+      // Floating platform
+      const platWidth = getRandomInt(50, 120);
+      const platHeight = getRandomInt(10, 25);
+      return {
+        type: "rect_platform",
+        x: x,
+        y: world.groundLevelY - platHeight - getRandomInt(10, 80),
+        width: platWidth,
+        height: platHeight,
+        colors: {
+          base: Palettes.futuristic.objects_primary.base,
+          trim: Palettes.futuristic.emissive[0],
+        },
+        originalColor: Palettes.futuristic.objects_primary.base,
+        canRandomizeYOnWrap: false,
+      };
+    } else {
+      // Energy conduit/pylon
+      const pylonHeight = getRandomInt(30, 70);
+      const pylonWidth = getRandomInt(5, 10);
+      return {
+        type: "energy_pylon",
+        x: x,
+        y: world.groundLevelY - pylonHeight,
+        width: pylonWidth,
+        height: pylonHeight,
+        colors: {
+          structure: Palettes.futuristic.objects_primary.shadow,
+          emissive_core: getRandomColor(Palettes.futuristic.emissive),
+        },
+        originalColor: Palettes.futuristic.objects_primary.shadow,
+        isEmissive: true, // Part of it is
+        canRandomizeYOnWrap: false,
+      };
+    }
   }
   static generateFuturisticGround(x, y, layerConfig, game, world) {
     const panelWidth = 80;
@@ -895,6 +987,7 @@ class World {
     const detailColors = [
       Palettes.futuristic.ground[2],
       Palettes.futuristic.emissive[0],
+      Palettes.futuristic.emissive[1],
     ];
     return {
       type: "textured_ground_rect",
@@ -936,7 +1029,7 @@ class World {
     let originalCrateColor = getRandomColor(Palettes.industrial.objects_accent);
     let originalPipeColor = Palettes.industrial.objects_primary.shadow;
 
-    if (r < 0.5) {
+    if (r < 0.4) {
       const size = getRandomInt(15, 30);
       element = {
         type: "rect_crates",
@@ -947,7 +1040,8 @@ class World {
         color: originalCrateColor,
         originalColor: originalCrateColor,
       };
-    } else {
+    } else if (r < 0.7) {
+      // Pipes
       const length = getRandomInt(40, 100);
       const thickness = getRandomInt(8, 15);
       element = {
@@ -958,6 +1052,21 @@ class World {
         height: thickness,
         color: originalPipeColor,
         originalColor: originalPipeColor,
+      };
+    } else {
+      // Piles of rubble/scrap
+      const pileSize = getRandomInt(20, 40);
+      element = {
+        type: "rubble_pile",
+        x: x,
+        y: world.groundLevelY - pileSize * 0.7, // Sit slightly lower
+        size: pileSize,
+        colors: [
+          Palettes.industrial.ground[1],
+          Palettes.industrial.objects_primary.shadow,
+          Palettes.industrial.objects_accent[0],
+        ],
+        originalColor: Palettes.industrial.ground[1],
       };
     }
     element.canRandomizeYOnWrap = false;
@@ -972,6 +1081,7 @@ class World {
     const detailColors = [
       Palettes.industrial.ground[3],
       Palettes.industrial.objects_accent[0],
+      Palettes.industrial.emissive[0],
     ];
     return {
       type: "textured_ground_rect",
@@ -1066,7 +1176,6 @@ class World {
           element.radius * 1.6,
           lightenDarkenColor(drawColor, -30)
         );
-        // Add small blinking lights
         if (Math.floor(gameTime * 3) % 2 === 0) {
           drawPixelRect(
             ctx,
@@ -1090,6 +1199,26 @@ class World {
           element.radius * 2 + getRandomInt(-2, 2),
           glitchColor
         );
+      } else if (element.celestialType === "sun") {
+        // Add subtle rays for sun
+        const numRays = 8;
+        for (let i = 0; i < numRays; i++) {
+          const angle = (i / numRays) * Math.PI * 2 + gameTime * 0.1;
+          const rayLength = element.radius * 1.5;
+          const rayStartX = element.x + Math.cos(angle) * element.radius * 0.8;
+          const rayStartY = drawY + Math.sin(angle) * element.radius * 0.8;
+          const rayEndX = element.x + Math.cos(angle) * rayLength;
+          const rayEndY = drawY + Math.sin(angle) * rayLength;
+          ctx.globalAlpha =
+            currentAlpha * 0.15 * ((Math.sin(gameTime * 2 + i) + 1) / 2); // Pulsing alpha for rays
+          ctx.strokeStyle = element.glowColor;
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.moveTo(rayStartX, rayStartY);
+          ctx.lineTo(rayEndX, rayEndY);
+          ctx.stroke();
+        }
+        ctx.globalAlpha = currentAlpha; // Reset alpha after rays
       }
     } else if (element.type === "pixelCloud") {
       const blockSize = Math.max(2, Math.floor(element.width / 10));
@@ -1158,14 +1287,13 @@ class World {
       );
     } else if (element.type === "mesa") {
       const hThird = element.height / 3;
-      // Use getSideColor for mesa parts if applicable, or direct from element.colors
       drawPixelRect(
         ctx,
         element.x,
         drawY,
         element.width,
         hThird,
-        element.colors.light || element.colors.top
+        World.getSideColor(element.colors, "light")
       );
       drawPixelRect(
         ctx,
@@ -1173,7 +1301,7 @@ class World {
         drawY + hThird,
         element.width,
         hThird,
-        element.colors.base || element.colors.middle
+        World.getSideColor(element.colors, "base")
       );
       drawPixelRect(
         ctx,
@@ -1181,7 +1309,7 @@ class World {
         drawY + hThird * 2,
         element.width,
         hThird,
-        element.colors.shadow || element.colors.bottom
+        World.getSideColor(element.colors, "shadow")
       );
       for (let i = 0; i < 5; i++) {
         const lineX = element.x + getRandomInt(5, element.width - 5);
@@ -1191,7 +1319,7 @@ class World {
           drawY + hThird,
           1,
           hThird * 2,
-          lightenDarkenColor(element.colors.base || element.colors.middle, -20)
+          lightenDarkenColor(World.getSideColor(element.colors, "base"), -20)
         );
       }
     } else if (element.type === "cactus") {
@@ -1248,7 +1376,10 @@ class World {
         element.height,
         element.baseColor
       );
-      const numDetails = Math.floor((element.width * element.height) / 200);
+      const numDetails = Math.floor(
+        (element.width * element.height) /
+          (element.textureType === "futuristic_guideways" ? 100 : 200)
+      );
       for (let i = 0; i < numDetails; i++) {
         const detailX = element.x + Math.random() * element.width;
         const detailY = drawY + Math.random() * element.height * 0.3;
@@ -1261,33 +1392,37 @@ class World {
         } else if (element.textureType === "gaming_grid_flowers") {
           dW = getRandomInt(2, 4);
           dH = getRandomInt(2, 4);
+          if (Math.random() < 0.1) detailColor = Palettes.gaming.emissive[2]; // Random pink flower
         } else if (element.textureType === "futuristic_guideways") {
           dW =
             Math.random() < 0.7
               ? element.width * getRandomFloat(0.3, 0.8)
               : getRandomInt(3, 6);
           dH = Math.random() < 0.7 ? getRandomInt(1, 2) : getRandomInt(3, 6);
-          if (dH === 1 || dH === 2)
-            detailColor = Palettes.futuristic.emissive[0]; // Emissive lines
+          if (dH <= 2 && Math.random() < 0.8)
+            detailColor = getRandomColor(Palettes.futuristic.emissive);
         } else if (element.textureType === "industrial_asphalt_cracks") {
           dW = Math.random() < 0.5 ? getRandomInt(10, 30) : getRandomInt(2, 5);
           dH = Math.random() < 0.5 ? getRandomInt(1, 3) : getRandomInt(2, 5);
-          // Lane markings for asphalt
-          const laneMarkingY = drawY + element.height * 0.15; // Position lines near top of ground segment
+          const laneMarkingY = drawY + element.height * 0.15;
           const segmentScrollX = element.x + this.worldX * scrollSpeedFactor;
           const dashLength = 30;
           const gapLength = 20;
-          if (Math.floor(segmentScrollX / (dashLength + gapLength)) % 2 === 0) {
-            // Dashed line
+          if (
+            i < 2 &&
+            Math.floor(segmentScrollX / (dashLength + gapLength)) % 2 === 0
+          ) {
             drawPixelRect(
               ctx,
               element.x,
-              laneMarkingY,
+              laneMarkingY + i * 5,
               element.width,
               2,
-              "#FFFF00"
-            ); // Simplified: full width yellow line for effect
+              Palettes.industrial.emissive[1]
+            );
           }
+          if (Math.random() < 0.05)
+            detailColor = Palettes.industrial.emissive[0]; // Random orange spark/stain
         } else {
           dW = getRandomInt(2, 8);
           dH = getRandomInt(2, 8);
@@ -1297,7 +1432,8 @@ class World {
     } else if (element.type === "debris") {
       if (
         element.debrisType === "wire" ||
-        element.debrisType === "rusty_pipe_fragment"
+        element.debrisType === "rusty_pipe_fragment" ||
+        element.debrisType === "circuit_piece"
       ) {
         drawPixelRect(
           ctx,
@@ -1307,6 +1443,30 @@ class World {
           element.height,
           drawColor
         );
+      } else if (element.debrisType === "gear") {
+        const r = element.size / 2;
+        drawPixelRect(
+          ctx,
+          element.x - r,
+          drawY - r,
+          element.size,
+          element.size,
+          drawColor
+        ); // Main circle
+        for (let i = 0; i < 6; i++) {
+          // Teeth
+          const angle = (i / 6) * Math.PI * 2;
+          const toothX = element.x + Math.cos(angle) * r;
+          const toothY = drawY + Math.sin(angle) * r;
+          drawPixelRect(
+            ctx,
+            toothX - 1,
+            toothY - 1,
+            2,
+            2,
+            lightenDarkenColor(drawColor, -20)
+          );
+        }
       } else {
         drawPixelRect(
           ctx,
@@ -1319,7 +1479,7 @@ class World {
       }
     } else if (element.type === "pixelStructure") {
       const structBlockSize = Math.max(3, Math.floor(element.width / 10));
-      const objPalette = element.colors; // This is Palettes.gaming.objects_primary
+      const objPalette = element.colors;
       for (let i = 0; i < element.width / structBlockSize; i++) {
         for (let j = 0; j < element.height / structBlockSize; j++) {
           if (
@@ -1375,6 +1535,17 @@ class World {
         element.height * 0.3,
         element.colors.bottom
       );
+      // Add some detail to floating island
+      for (let i = 0; i < 3; i++) {
+        drawPixelRect(
+          ctx,
+          element.x + getRandomInt(0, element.width - 5),
+          drawY + getRandomInt(0, element.height * 0.7 - 5),
+          5,
+          5,
+          lightenDarkenColor(element.colors.top, -20)
+        );
+      }
     } else if (element.type === "pixelTree") {
       drawPixelRect(
         ctx,
@@ -1580,6 +1751,27 @@ class World {
         2,
         element.colors.trim
       );
+    } else if (element.type === "energy_pylon") {
+      drawPixelRect(
+        ctx,
+        element.x,
+        drawY,
+        element.width,
+        element.height,
+        element.colors.structure
+      );
+      // Pulsing core
+      const pulse = (Math.sin(gameTime * 5) + 1) / 2;
+      const coreHeight = element.height * (0.3 + pulse * 0.2);
+      const coreY = drawY + (element.height - coreHeight) / 2;
+      drawPixelRect(
+        ctx,
+        element.x + element.width * 0.25,
+        coreY,
+        element.width * 0.5,
+        coreHeight,
+        element.colors.emissive_core
+      );
     } else if (
       element.type === "industrialBuilding" ||
       element.type === "industrialSmokestack"
@@ -1670,6 +1862,23 @@ class World {
         element.height - 2,
         lightenDarkenColor(drawColor, -20)
       );
+      // Add some wood grain/panel lines
+      drawPixelRect(
+        ctx,
+        element.x + element.width * 0.4,
+        drawY,
+        2,
+        element.height,
+        lightenDarkenColor(drawColor, -30)
+      );
+      drawPixelRect(
+        ctx,
+        element.x,
+        drawY + element.height * 0.4,
+        element.width,
+        2,
+        lightenDarkenColor(drawColor, -30)
+      );
     } else if (element.type === "rect_pipes") {
       drawPixelRect(
         ctx,
@@ -1687,6 +1896,23 @@ class World {
         element.height * 0.3,
         lightenDarkenColor(drawColor, 20)
       );
+    } else if (element.type === "rubble_pile") {
+      for (let i = 0; i < 5; i++) {
+        const rX = element.x + (Math.random() - 0.5) * element.size * 0.8;
+        const rY =
+          drawY +
+          (Math.random() - 0.5) * element.size * 0.3 +
+          element.size * 0.2;
+        const rSize = element.size * getRandomFloat(0.2, 0.5);
+        drawPixelRect(
+          ctx,
+          rX,
+          rY,
+          rSize,
+          rSize,
+          getRandomColor(element.colors)
+        );
+      }
     }
   }
 
@@ -1810,6 +2036,36 @@ class World {
         getRandomFloat(0.2, 0.5),
         "weather"
       );
+      this.weatherParticles.push(particle);
+    } else if (theme === "gaming" && chance < 0.03) {
+      // Glitchy particles for gaming theme
+      const particle = new Particle(
+        getRandomFloat(0, Config.CANVAS_WIDTH),
+        getRandomFloat(0, Config.CANVAS_HEIGHT),
+        getRandomFloat(-20, 20),
+        getRandomFloat(-20, 20),
+        getRandomFloat(0.2, 0.5),
+        getRandomInt(2, 4),
+        getRandomColor(Palettes.gaming.emissive),
+        getRandomFloat(0.5, 0.8),
+        "weather"
+      );
+      particle.drag = 0.9;
+      this.weatherParticles.push(particle);
+    } else if (theme === "futuristic" && chance < 0.04) {
+      // Soft energy motes for futuristic
+      const particle = new Particle(
+        getRandomFloat(0, Config.CANVAS_WIDTH),
+        getRandomFloat(0, Config.CANVAS_HEIGHT),
+        getRandomFloat(-10, 10),
+        getRandomFloat(-10, 10),
+        getRandomFloat(1, 2),
+        getRandomInt(1, 3),
+        getRandomColor(Palettes.futuristic.emissive.map((c) => c + "44")), // semi-transparent
+        getRandomFloat(0.3, 0.6),
+        "weather"
+      );
+      particle.gravity = getRandomFloat(-2, 2); // slow drift
       this.weatherParticles.push(particle);
     }
   }
@@ -1942,8 +2198,14 @@ class World {
       layer.render(ctx);
     });
 
+    // Render weather particles that should be behind player/main scene elements
+    // And also not too far in the distance (e.g. above horizon)
     this.weatherParticles.forEach((p) => {
-      if (p.type === "weather" && p.y < this.groundLevelY + 20) {
+      if (
+        p.type === "weather" &&
+        p.y < this.groundLevelY + 40 &&
+        p.y > this.groundLevelY * 0.3
+      ) {
         p.render(ctx);
       }
     });
@@ -1962,6 +2224,16 @@ class World {
         layer.scrollSpeedFactor > 1
       ) {
         layer.render(ctx);
+      }
+    });
+    // Render weather particles that should be in front (e.g. very close rain, or all weather if desired)
+    this.weatherParticles.forEach((p) => {
+      if (
+        p.type === "weather" &&
+        (p.y >= this.groundLevelY + 40 || p.y <= this.groundLevelY * 0.3)
+      ) {
+        // Example: close or very high weather
+        p.render(ctx);
       }
     });
   }
