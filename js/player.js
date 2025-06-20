@@ -353,14 +353,14 @@ class Player {
     // Car Body - More detailed pixel art car (I.1.A)
     // Layered approach:
     // 1. Undercarriage
-    drawPixelRect(
-      ctx,
-      carX,
-      bodyY + this.height * 0.75 + rearTiltOffset / 4,
-      this.width,
-      this.height * 0.25,
-      carColors.CAR_UNDERCARRIAGE
-    );
+    // drawPixelRect(
+    //   ctx,
+    //   carX,
+    //   bodyY + this.height * 0.75 + rearTiltOffset / 4,
+    //   this.width,
+    //   this.height * 0.25,
+    //   carColors.CAR_UNDERCARRIAGE
+    // );
 
     // 2. Main Body
     const mainBodyHeight = this.height * 0.65;
