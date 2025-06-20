@@ -288,7 +288,6 @@ const StopsManager = {
         id: "project_ai_game",
         worldPositionX: initialStopPosition,
         theme: "gaming",
-        linkURL: "https://example.com/ai-game-project",
         promptText: "AI Game Project Details", // Original prompt, less used now for main UI
         markerAssetFunction: StopMarkers.drawArcadeCabinet,
         markerScreenYOffset: 0,
@@ -298,7 +297,6 @@ const StopsManager = {
         id: "project_ai_ta",
         worldPositionX: initialStopPosition + distanceBetweenStops,
         theme: "futuristic",
-        linkURL: "https://example.com/ai-ta-project",
         promptText: "AI TA Project Details",
         markerAssetFunction: StopMarkers.drawHolographicTerminal,
         markerScreenYOffset: 0,
@@ -308,7 +306,6 @@ const StopsManager = {
         id: "project_truck_parts",
         worldPositionX: initialStopPosition + 2 * distanceBetweenStops,
         theme: "industrial",
-        linkURL: "https://example.com/truck-parts-project",
         promptText: "Truck Parts Project Details",
         markerAssetFunction: StopMarkers.drawPixelWarehouse,
         markerScreenYOffset: 0,
@@ -414,7 +411,7 @@ const StopsManager = {
           } Zone`,
           theme: stop.theme,
           skyColor: skyColor,
-          linkURL: stop.linkURL, // Include the link URL for the zone
+          linkURL: Config.STOP_LINKS[stop.id], // Reference link from Config
           stopId: stop.id, // Include the stop ID for reference
         };
         break;

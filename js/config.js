@@ -9,4 +9,9 @@ const Config = {
     INTERACT: ["Enter", " ", "f", "F"],
   },
   DEBUG_MODE: false,
+  STOP_LINKS: {
+    project_ai_game: "https://example.com/ai-game-project",
+    project_ai_ta: "https://example.com/ai-ta-project",
+    project_truck_parts: "https://example.com/truck-parts-project",
+  },
 };
