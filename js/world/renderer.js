@@ -98,7 +98,7 @@ const WorldRenderer = {
           element.radius * 1.6,
           lightenDarkenColor(drawColor, -30)
         );
-        if (Math.floor(gameTime * 3) % 2 === 0) {
+        if (Math.floor((gameTime * 3) / 8) % 2 === 0) {
           drawPixelRect(
             ctx,
             element.x + getRandomFloat(-1, 1) * element.radius * 0.7,
@@ -110,7 +110,7 @@ const WorldRenderer = {
         }
       } else if (
         element.celestialType === "glitch_moon" &&
-        Math.floor(gameTime * 10) % 3 === 0
+        Math.floor((gameTime * 10) / 8) % 3 === 0
       ) {
         const glitchColor = getRandomColor(Palettes.gaming.emissive);
         drawPixelRect(
@@ -131,7 +131,7 @@ const WorldRenderer = {
           const rayEndX = element.x + Math.cos(angle) * rayLength;
           const rayEndY = drawY + Math.sin(angle) * rayLength;
           ctx.globalAlpha =
-            currentAlpha * 0.15 * ((Math.sin(gameTime * 2 + i) + 1) / 2);
+            currentAlpha * 0.15 * ((Math.sin((gameTime * 2) / 8 + i) + 1) / 2);
           ctx.strokeStyle = element.glowColor;
           ctx.lineWidth = 2;
           ctx.beginPath();
@@ -297,42 +297,68 @@ const WorldRenderer = {
         element.height,
         element.baseColor
       );
-      const numDetails = Math.floor(
-        (element.width * element.height) /
-          (element.textureType === "futuristic_guideways" ? 100 : 200)
-      );
-      for (let i = 0; i < numDetails; i++) {
-        const detailX = element.x + Math.random() * element.width;
-        const detailY = drawY + Math.random() * element.height * 0.3;
-        let dW, dH;
-        let detailColor = getRandomColor(element.detailColors);
 
-        if (element.textureType === "desert_cracks_pebbles") {
-          dW = Math.random() < 0.5 ? getRandomInt(5, 15) : getRandomInt(1, 3);
-          dH = Math.random() < 0.5 ? getRandomInt(1, 3) : getRandomInt(5, 15);
-        } else if (element.textureType === "gaming_grid_flowers") {
-          dW = getRandomInt(2, 4);
-          dH = getRandomInt(2, 4);
-          if (Math.random() < 0.1) detailColor = Palettes.gaming.emissive[2];
-        } else if (element.textureType === "futuristic_guideways") {
-          dW =
-            Math.random() < 0.7
-              ? element.width * getRandomFloat(0.3, 0.8)
-              : getRandomInt(3, 6);
-          dH = Math.random() < 0.7 ? getRandomInt(1, 2) : getRandomInt(3, 6);
-          if (dH <= 2 && Math.random() < 0.8)
-            detailColor = getRandomColor(Palettes.futuristic.emissive);
-        } else if (element.textureType === "industrial_asphalt_cracks") {
-          dW = Math.random() < 0.5 ? getRandomInt(10, 30) : getRandomInt(2, 5);
-          dH = Math.random() < 0.5 ? getRandomInt(1, 3) : getRandomInt(2, 5);
-          if (Math.random() < 0.05)
-            detailColor = Palettes.industrial.emissive[0];
-        } else {
-          dW = getRandomInt(2, 8);
-          dH = getRandomInt(2, 8);
+      // Caching details to prevent flickering on every frame
+      if (!element.details) {
+        element.details = [];
+        const numDetails = Math.floor(
+          (element.width * element.height) /
+            (element.textureType === "futuristic_guideways" ? 100 : 200)
+        );
+        for (let i = 0; i < numDetails; i++) {
+          const detail = {};
+          detail.x_offset = Math.random() * element.width;
+          detail.y_offset = Math.random() * element.height * 0.3;
+          detail.color = getRandomColor(element.detailColors);
+
+          if (element.textureType === "desert_cracks_pebbles") {
+            detail.w =
+              Math.random() < 0.5 ? getRandomInt(5, 15) : getRandomInt(1, 3);
+            detail.h =
+              Math.random() < 0.5 ? getRandomInt(1, 3) : getRandomInt(5, 15);
+          } else if (element.textureType === "gaming_grid_flowers") {
+            detail.w = getRandomInt(2, 4);
+            detail.h = getRandomInt(2, 4);
+            if (Math.random() < 0.1) detail.color = Palettes.gaming.emissive[2];
+          } else if (element.textureType === "futuristic_guideways") {
+            detail.w =
+              Math.random() < 0.7
+                ? element.width * getRandomFloat(0.3, 0.8)
+                : getRandomInt(3, 6);
+            detail.h =
+              Math.random() < 0.7 ? getRandomInt(1, 2) : getRandomInt(3, 6);
+            if (detail.h <= 2 && Math.random() < 0.8) {
+              detail.color = getRandomColor(Palettes.futuristic.emissive);
+            }
+          } else if (element.textureType === "industrial_asphalt_cracks") {
+            detail.w =
+              Math.random() < 0.5 ? getRandomInt(10, 30) : getRandomInt(2, 5);
+            detail.h =
+              Math.random() < 0.5 ? getRandomInt(1, 3) : getRandomInt(2, 5);
+            if (Math.random() < 0.05) {
+              detail.color = Palettes.industrial.emissive[0];
+            }
+          } else {
+            detail.w = getRandomInt(2, 8);
+            detail.h = getRandomInt(2, 8);
+          }
+          element.details.push(detail);
         }
-        drawPixelRect(ctx, detailX, detailY, dW, dH, detailColor);
       }
+
+      // Render from cache
+      element.details.forEach((detail) => {
+        const detailDrawX = element.x + detail.x_offset;
+        const detailDrawY = element.y + detail.y_offset + (drawY - element.y);
+        drawPixelRect(
+          ctx,
+          detailDrawX,
+          detailDrawY,
+          detail.w,
+          detail.h,
+          detail.color
+        );
+      });
     } else if (element.type === "debris") {
       if (
         element.debrisType === "wire" ||
@@ -404,7 +430,10 @@ const WorldRenderer = {
               (activeThemeForLights === "gaming" ||
                 activeThemeForLights === "futuristic")
             ) {
-              if (Math.floor(gameTime * (3 + Math.random() * 2)) % 2 === 0) {
+              if (
+                Math.floor((gameTime * (3 + Math.random() * 2)) / 8) % 2 ===
+                0
+              ) {
                 blockColor = getRandomColor(
                   Palettes[activeThemeForLights].emissive
                 );
@@ -519,7 +548,7 @@ const WorldRenderer = {
         element.size,
         element.colors.box
       );
-      if (Math.floor(gameTime * 2) % 2 === 0 || !element.isEmissive) {
+      if (Math.floor((gameTime * 2) / 8) % 2 === 0 || !element.isEmissive) {
         drawPixelRect(
           ctx,
           element.x + element.size * 0.3,
@@ -605,7 +634,8 @@ const WorldRenderer = {
       }
       element.lights.forEach((light) => {
         if (
-          Math.floor(gameTime * light.blinkRate + light.blinkPhase) % 2 ===
+          Math.floor((gameTime * light.blinkRate) / 8 + light.blinkPhase) %
+            2 ===
           0
         ) {
           drawPixelRect(
@@ -660,7 +690,7 @@ const WorldRenderer = {
         element.height,
         element.colors.structure
       );
-      const pulse = (Math.sin(gameTime * 5) + 1) / 2;
+      const pulse = (Math.sin((gameTime * 5) / 8) + 1) / 2;
       const coreHeight = element.height * (0.3 + pulse * 0.2);
       const coreY = drawY + (element.height - coreHeight) / 2;
       drawPixelRect(

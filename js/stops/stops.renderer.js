@@ -6,7 +6,7 @@ const StopsRenderer = {
 
     let pulseFactor = 1.0;
     if (isActive) {
-      pulseFactor = 1.0 + ((Math.sin(gameTime * 5) + 1) / 2) * 0.1;
+      pulseFactor = 1.0 + ((Math.sin((gameTime * 5) / 8) + 1) / 2) * 0.1;
     }
 
     drawPixelRect(
@@ -62,14 +62,17 @@ const StopsRenderer = {
     let highlightColor = themePalette.objects_primary.light;
 
     if (isActive) {
-      const pulse = (Math.sin(gameTime * 6) + 1) / 2;
+      const pulse = (Math.sin((gameTime * 6) / 8) + 1) / 2;
       mainColor = interpolateColor(
         themePalette.objects_primary.base,
         themePalette.objects_primary.light,
         pulse * 0.5
       );
       if (themePalette.emissive && themePalette.emissive.length > 0) {
-        screenColor = getRandomColor(themePalette.emissive);
+        screenColor =
+          themePalette.emissive[
+            Math.floor((gameTime * 2) / 8) % themePalette.emissive.length
+          ];
       } else {
         screenColor = "#FFFF00";
       }
@@ -195,7 +198,7 @@ const StopsRenderer = {
 
     if (isActive) {
       const numFrames = 3;
-      const screenFrame = Math.floor(gameTime * 2) % numFrames;
+      const screenFrame = Math.floor((gameTime * 2) / 8) % numFrames;
       const screenPixelSize = 2;
       const screenContentX = x - cabinetWidth / 2 + 6;
       const screenContentY = y - cabinetHeight + 8;
@@ -324,7 +327,7 @@ const StopsRenderer = {
         themePalette.emissive && themePalette.emissive.length > 0
           ? themePalette.emissive[0]
           : "#FFFF00";
-      ctx.globalAlpha = ((Math.sin(gameTime * 5) + 1) / 2) * 0.3 + 0.1;
+      ctx.globalAlpha = ((Math.sin((gameTime * 5) / 8) + 1) / 2) * 0.3 + 0.1;
       drawPixelRect(
         ctx,
         x - cabinetWidth / 2 - 5,
@@ -363,7 +366,7 @@ const StopsRenderer = {
     let baseStructColor = themePalette.objects_primary.base;
 
     if (isActive) {
-      const pulse = (Math.sin(gameTime * 4) + 1) / 2;
+      const pulse = (Math.sin((gameTime * 4) / 8) + 1) / 2;
       if (themePalette.emissive && themePalette.emissive.length > 1) {
         primaryColor = interpolateColor(
           themePalette.emissive[0],
@@ -411,7 +414,7 @@ const StopsRenderer = {
     const numLayers = isActive ? 4 : 2;
     for (let i = 0; i < numLayers; i++) {
       const layerAlpha = isActive ? 0.2 + i * 0.15 : 0.3 + i * 0.1;
-      const layerOffset = isActive ? Math.sin(gameTime * 2 + i) * 3 : 0;
+      const layerOffset = isActive ? Math.sin((gameTime * 2) / 8 + i) * 3 : 0;
       const layerWidth = screenWidth + i * 4;
       const layerHeight = screenHeight + i * 2;
 
@@ -438,7 +441,9 @@ const StopsRenderer = {
     const lineCount = 5;
     for (let i = 0; i < lineCount; i++) {
       const lineYVal = screenY + 4 + i * (screenHeight / lineCount);
-      const scrollOffset = isActive ? (gameTime * 15 + i * 5) % screenWidth : 0;
+      const scrollOffset = isActive
+        ? ((gameTime * 15) / 8 + i * 5) % screenWidth
+        : 0;
       ctx.beginPath();
       ctx.moveTo(
         Math.floor(x - screenWidth / 2 + 3 + scrollOffset),
@@ -467,7 +472,7 @@ const StopsRenderer = {
     }
 
     if (isActive) {
-      ctx.globalAlpha = ((Math.sin(gameTime * 5) + 1) / 2) * 0.2 + 0.1;
+      ctx.globalAlpha = ((Math.sin((gameTime * 5) / 8) + 1) / 2) * 0.2 + 0.1;
       drawPixelRect(
         ctx,
         x - screenWidth / 2 - 10,
@@ -507,7 +512,7 @@ const StopsRenderer = {
     let highlightColor = themePalette.objects_primary.light;
 
     if (isActive) {
-      const pulse = (Math.sin(gameTime * 3) + 1) / 2;
+      const pulse = (Math.sin((gameTime * 3) / 8) + 1) / 2;
       mainColor = lightenDarkenColor(
         themePalette.objects_primary.base,
         Math.floor(pulse * 10)
@@ -616,7 +621,7 @@ const StopsRenderer = {
     );
 
     if (isActive) {
-      const lightOn = Math.floor(gameTime * 2) % 2 === 0;
+      const lightOn = Math.floor((gameTime * 2) / 8) % 2 === 0;
       const activeLightColor =
         themePalette.emissive && themePalette.emissive.length > 0
           ? themePalette.emissive[0]
@@ -682,7 +687,7 @@ const StopsRenderer = {
         themePalette.emissive && themePalette.emissive.length > 1
           ? themePalette.emissive[1]
           : "#FFD700";
-      ctx.globalAlpha = ((Math.sin(gameTime * 5) + 1) / 2) * 0.15;
+      ctx.globalAlpha = ((Math.sin((gameTime * 5) / 8) + 1) / 2) * 0.15;
       drawPixelRect(
         ctx,
         x - buildingWidth / 2 - 5,

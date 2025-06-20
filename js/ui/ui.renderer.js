@@ -128,7 +128,7 @@ const UIRenderer = {
     status.forEach((s, i) => {
       let lightColor = s.active ? s.colorOn : s.colorOff;
       if (s.active && (s.icon === "signal" || s.icon === "light")) {
-        if (Math.floor(ui.game.gameTime * 3) % 2 === 0) {
+        if (Math.floor((ui.game.gameTime * 3) / 8) % 2 === 0) {
           lightColor = lightenDarkenColor(lightColor, -40);
         }
       }
@@ -246,7 +246,7 @@ const UIRenderer = {
             StopsManager.activeStop &&
             StopsManager.activeStop.id === stop.id
           ) {
-            const pulse = (Math.sin(ui.game.gameTime * 8) + 1) / 2;
+            const pulse = (Math.sin(ui.game.gameTime) + 1) / 2;
             const pulseSizeIncrease = Math.floor(
               pulse * 2 * ui.fontSettings.scale
             );
