@@ -14,12 +14,13 @@
     </div>
     <script src="js/config.js"></script>
     <script src="js/utils.js"></script>
+    <script src="js/effects.js"></script>
+    {/* Added effects.js */}
     <script src="js/input.js"></script>
     <script src="js/player.js"></script>
     <script src="js/world.js"></script>
     <script src="js/stops.js"></script>
     <script src="js/ui.js"></script>
-    <!-- Add UI -->
     <script src="js/main.js"></script>
   </body>
 </html>
@@ -46,7 +47,18 @@ body {
 
 canvas {
   display: block; /* Removes extra space below canvas */
+  image-rendering: pixelated; /* Ensures crisp pixels */
+  image-rendering: -moz-crisp-edges;
+  image-rendering: crisp-edges;
 }
+
+/* Example for a custom pixel font if loaded via CSS */
+/*
+  @font-face {
+    font-family: 'MyPixelFont';
+    src: url('path/to/your/pixel-font.ttf') format('truetype');
+  }
+  */
 
 
 ---
@@ -61,12 +73,161 @@ const Config = {
     MOVE_LEFT: ["ArrowLeft", "a", "A"],
     MOVE_RIGHT: ["ArrowRight", "d", "D"],
     INTERACT: ["Enter", " ", "f", "F"],
+    TOGGLE_HEADLIGHTS: ["h", "H"], // Added for headlights
   },
-  DEBUG_MODE: false,
+  DEBUG_MODE: false, // Set to true for debug info
   STOP_LINKS: {
     project_ai_game: "https://example.com/ai-game-project",
     project_ai_ta: "https://example.com/ai-ta-project",
     project_truck_parts: "https://example.com/truck-parts-project",
+  },
+  PLAYER_DUST_EMIT_THRESHOLD: 1.0,
+  PLAYER_EXHAUST_EMIT_THRESHOLD: 0.5,
+  PLAYER_SPEED_LINE_THRESHOLD: 5.0,
+  MAX_DUST_PARTICLES_PER_FRAME: 2,
+  MAX_EXHAUST_PARTICLES_PER_FRAME: 1,
+  MAX_SPEED_LINES_PER_FRAME: 3,
+  UI_TYPEWRITER_SPEED: 3, // characters per second (approx, tied to frames)
+  UI_PANEL_INTRO_SPEED: 15, // pixels per frame
+};
+
+
+---
+./js/effects.js
+---
+// js/effects.js
+
+class Particle {
+  constructor(
+    x,
+    y,
+    vx,
+    vy,
+    lifespan,
+    size,
+    color,
+    alpha = 1.0,
+    type = "generic"
+  ) {
+    this.x = x;
+    this.y = y;
+    this.vx = vx;
+    this.vy = vy;
+    this.lifespan = lifespan; // in seconds
+    this.initialLifespan = lifespan;
+    this.size = size;
+    this.color = color;
+    this.alpha = alpha;
+    this.initialAlpha = alpha;
+    this.type = type; // e.g., "dust", "exhaust", "speedline", "weather"
+    this.gravity = 0; // Specific to particle type
+    this.drag = 1.0; // Multiplicative drag
+  }
+
+  update(deltaTime) {
+    this.vy += this.gravity * deltaTime;
+    this.vx *= this.drag;
+    this.vy *= this.drag; // Apply drag to vy as well if needed
+
+    this.x += this.vx * deltaTime;
+    this.y += this.vy * deltaTime;
+    this.lifespan -= deltaTime;
+
+    // Fade out based on lifespan
+    if (this.initialLifespan > 0) {
+      this.alpha = this.initialAlpha * (this.lifespan / this.initialLifespan);
+    }
+    this.alpha = Math.max(0, this.alpha);
+  }
+
+  render(ctx) {
+    if (this.lifespan <= 0 || this.alpha <= 0) return;
+
+    ctx.globalAlpha = this.alpha;
+    if (this.type === "speedline") {
+      ctx.strokeStyle = this.color;
+      ctx.lineWidth = this.size;
+      ctx.beginPath();
+      ctx.moveTo(this.x, this.y);
+      ctx.lineTo(this.x - this.vx * 0.1, this.y - this.vy * 0.1); // Length based on velocity
+      ctx.stroke();
+    } else {
+      drawPixelRect(
+        ctx,
+        this.x - this.size / 2,
+        this.y - this.size / 2,
+        this.size,
+        this.size,
+        this.color
+      );
+    }
+    ctx.globalAlpha = 1.0;
+  }
+}
+
+const EffectsManager = {
+  particles: [],
+
+  addParticle(particle) {
+    this.particles.push(particle);
+  },
+
+  update(deltaTime) {
+    for (let i = this.particles.length - 1; i >= 0; i--) {
+      this.particles[i].update(deltaTime);
+      if (this.particles[i].lifespan <= 0 || this.particles[i].alpha <= 0) {
+        this.particles.splice(i, 1);
+      }
+    }
+  },
+
+  render(ctx, layer = "behind_player") {
+    // layer can be "behind_player", "overlay"
+    // This simple manager renders all particles. More complex layering might be needed.
+    // For now, assume particles are rendered at appropriate times by their emitters or a global call.
+    // This render function could be used for global effects like weather.
+    this.particles.forEach((particle) => {
+      // Potentially filter by particle.renderLayer or type if needed
+      particle.render(ctx);
+    });
+  },
+
+  // --- Screen Effects ---
+  drawVignette(ctx) {
+    const midX = Config.CANVAS_WIDTH / 2;
+    const midY = Config.CANVAS_HEIGHT / 2;
+    const outerRadius = Config.CANVAS_WIDTH * 0.7;
+    const innerRadius = Config.CANVAS_WIDTH * 0.35; // Adjusted for a more noticeable effect
+
+    const vignetteGradient = ctx.createRadialGradient(
+      midX,
+      midY,
+      innerRadius,
+      midX,
+      midY,
+      outerRadius
+    );
+    vignetteGradient.addColorStop(0, "rgba(0,0,0,0)");
+    vignetteGradient.addColorStop(1, "rgba(0,0,0,0.3)"); // Slightly darker
+    ctx.fillStyle = vignetteGradient;
+    ctx.fillRect(0, 0, Config.CANVAS_WIDTH, Config.CANVAS_HEIGHT);
+  },
+
+  drawScanlines(ctx, world) {
+    // Example: only for gaming or futuristic themes
+    if (
+      world &&
+      (world.currentTheme === "gaming" ||
+        world.currentTheme === "futuristic" ||
+        (world.isTransitioning &&
+          (world.transitionTargetTheme === "gaming" ||
+            world.transitionTargetTheme === "futuristic")))
+    ) {
+      ctx.fillStyle = "rgba(0,0,0,0.12)";
+      for (let y = 0; y < Config.CANVAS_HEIGHT; y += 3) {
+        ctx.fillRect(0, y, Config.CANVAS_WIDTH, 1);
+      }
+    }
   },
 };
 
@@ -77,21 +238,39 @@ const Config = {
 // js/input.js
 const Input = {
   keys: {},
+  lastPressed: {}, // For detecting single presses
   init() {
     window.addEventListener("keydown", (e) => this.handleKeyDown(e));
     window.addEventListener("keyup", (e) => this.handleKeyUp(e));
     if (Config.DEBUG_MODE) console.log("Input system initialized.");
   },
   handleKeyDown(e) {
+    if (!this.keys[e.key]) {
+      // Only set lastPressed on initial press
+      this.lastPressed[e.key] = true;
+    }
     this.keys[e.key] = true;
   },
   handleKeyUp(e) {
     this.keys[e.key] = false;
+    this.lastPressed[e.key] = false; // Clear lastPressed on key up
   },
   isPressed(action) {
     const boundKeys = Config.KeyBindings[action];
     if (boundKeys) {
       return boundKeys.some((key) => this.keys[key]);
+    }
+    return false;
+  },
+  isJustPressed(action) {
+    const boundKeys = Config.KeyBindings[action];
+    if (boundKeys) {
+      for (const key of boundKeys) {
+        if (this.keys[key] && this.lastPressed[key]) {
+          this.lastPressed[key] = false; // Consume the "just pressed" state
+          return true;
+        }
+      }
     }
     return false;
   },
@@ -102,7 +281,15 @@ const Input = {
     return this.isPressed("MOVE_RIGHT");
   },
   isInteractPressed() {
+    // This will now be for continuous press if needed
     return this.isPressed("INTERACT");
+  },
+  isInteractJustPressed() {
+    // For single action
+    return this.isJustPressed("INTERACT");
+  },
+  isToggleHeadlightsJustPressed() {
+    return this.isJustPressed("TOGGLE_HEADLIGHTS");
   },
 };
 Input.init();
@@ -128,13 +315,19 @@ class Game {
   init() {
     this.canvas.width = Config.CANVAS_WIDTH;
     this.canvas.height = Config.CANVAS_HEIGHT;
+    // Crucial for pixel art: disable image smoothing
     this.ctx.imageSmoothingEnabled = false;
     this.ctx.mozImageSmoothingEnabled = false;
     this.ctx.webkitImageSmoothingEnabled = false;
     this.ctx.msImageSmoothingEnabled = false;
+
     this.player = new Player(this);
-    this.ui = new UI(this);
-    this.world = new World(this);
+    this.world = new World(this); // World needs player for groundLevelY relative positioning
+    this.ui = new UI(this); // UI needs game for gameTime and other states
+
+    // Initialize StopsManager (already self-initializes, but good to be aware)
+    // StopsManager.init();
+
     if (Config.DEBUG_MODE) {
       console.log(
         "Game initialized with Player, World, StopsManager, and UI ready."
@@ -143,48 +336,92 @@ class Game {
     this.gameLoop = this.gameLoop.bind(this);
     requestAnimationFrame(this.gameLoop);
   }
+
   update(deltaTime) {
     this.player.update(deltaTime);
     const worldScrollSpeed = this.player.currentSpeed;
-    this.world.update(worldScrollSpeed);
+    this.world.update(worldScrollSpeed); // World update might change theme, affecting UI
     StopsManager.update(
       this.world.worldX,
       this.player.screenX,
-      this.player.width
-    );
+      this.player.width,
+      this
+    ); // Pass game for gameTime
+    this.ui.update(deltaTime); // UI update depends on game state (theme, active stop)
+    EffectsManager.update(deltaTime); // Update global effects like screen-wide particles
   }
+
   render() {
-    this.world.render(this.ctx);
-    const playerGroundY =
-      this.player.effectiveY + this.player.height - this.player.wheelRadius;
-    StopsManager.render(this.ctx, this.world.worldX, playerGroundY);
-    this.player.render(this.ctx);
-    this.ui.render(this.ctx);
+    // Clear canvas (though world sky usually covers this)
+    this.ctx.clearRect(0, 0, Config.CANVAS_WIDTH, Config.CANVAS_HEIGHT);
+
+    this.world.render(this.ctx); // Renders sky, parallax layers (except some foreground)
+
+    const playerGroundY = this.world.groundLevelY; // Use world's ground level
+    StopsManager.render(
+      this.ctx,
+      this.world.worldX,
+      playerGroundY,
+      this.gameTime
+    );
+
+    this.player.render(this.ctx); // Renders player and its particles (dust, exhaust)
+
+    this.world.renderForeground(this.ctx); // Renders foreground elements after player
+
+    // Global screen effects before UI
+    EffectsManager.drawVignette(this.ctx); // III.2.B Vignette
+    EffectsManager.drawScanlines(this.ctx, this.world); // III.2.B Scanlines
+
+    this.ui.render(this.ctx); // Renders UI on top of everything
+
     if (Config.DEBUG_MODE) {
       this.ctx.fillStyle = "white";
-      this.ctx.font = "12px Courier New";
-      this.ctx.textAlign = "left";
-      this.ctx.fillText(`FPS: ${(1 / this.deltaTime).toFixed(0)}`, 10, 20);
-      this.ctx.fillText(`GameTime: ${this.gameTime.toFixed(2)}s`, 10, 35);
+      // Use UI's pixel text for debug if available, else fallback
+      if (this.ui && typeof this.ui.drawPixelText === "function") {
+        const fpsText = `FPS: ${(1 / this.deltaTime).toFixed(0)}`;
+        const gameTimeText = `GT: ${this.gameTime.toFixed(1)}s`;
+        this.ui.drawPixelText(this.ctx, fpsText, 10, 10, "white", 1.5);
+        this.ui.drawPixelText(this.ctx, gameTimeText, 10, 25, "white", 1.5);
+      } else {
+        this.ctx.font = "12px Courier New";
+        this.ctx.textAlign = "left";
+        this.ctx.fillText(`FPS: ${(1 / this.deltaTime).toFixed(0)}`, 10, 20);
+        this.ctx.fillText(`GameTime: ${this.gameTime.toFixed(2)}s`, 10, 35);
+      }
     }
   }
+
   gameLoop(currentTime) {
+    const now = performance.now(); // Use performance.now() for higher precision
     if (this.lastTime === 0) {
-      this.lastTime = currentTime;
+      this.lastTime = now;
     }
-    this.deltaTime = (currentTime - this.lastTime) / 1000;
-    this.lastTime = currentTime;
+    // Calculate deltaTime in seconds
+    this.deltaTime = (now - this.lastTime) / 1000;
+    this.lastTime = now;
+
     this.gameTime += this.deltaTime;
     this.frameCount++;
-    const maxDeltaTime = (1 / Config.TARGET_FPS) * 3;
+
+    // Delta time clamping to prevent physics explosions on tab resume / lag spikes
+    const maxDeltaTime = (1 / Config.TARGET_FPS) * 3; // Allow up to 3 frames worth of catch-up
     if (this.deltaTime > maxDeltaTime) {
+      if (Config.DEBUG_MODE)
+        console.warn(
+          `DeltaTime capped from ${this.deltaTime.toFixed(
+            4
+          )} to ${maxDeltaTime.toFixed(4)}`
+        );
       this.deltaTime = maxDeltaTime;
     }
+
     this.update(this.deltaTime);
     this.render();
     requestAnimationFrame(this.gameLoop);
   }
 }
+
 window.onload = () => {
   const game = new Game();
 };
@@ -197,157 +434,525 @@ window.onload = () => {
 class Player {
   constructor(game) {
     this.game = game;
-    this.width = 80;
-    this.height = 40;
+    // I.1.A Player Vehicle Design (dimensions might change based on new sprite)
+    this.width = 72; // Adjusted for a more detailed sprite
+    this.height = 36; // Adjusted
     this.screenX = (Config.CANVAS_WIDTH - this.width) / 2;
-    this.screenY = Config.CANVAS_HEIGHT - this.height - 60;
+    this.screenY = Config.CANVAS_HEIGHT - this.height - 70; // Adjusted for ground level
+
     this.bobAngle = 0;
-    this.bobSpeed = 0.1;
-    this.bobAmplitude = 2;
+    this.bobSpeed = 0.15; // Slightly faster bob
+    this.bobAmplitude = 1.5; // Slightly smaller amplitude for more subtle suspension feel
+
     this.wheelFrame = 0;
-    this.wheelAnimationSpeed = 0.2;
-    this.wheelRadius = 8;
+    this.wheelAnimationSpeed = 0.25; // Slightly faster wheel animation
+    this.wheelRadius = 7; // Adjusted wheel radius
+
     this.currentSpeed = 0;
-    this.maxSpeed = 7; // Changed from 5 to 7
-    this.acceleration = 0.1;
-    this.deceleration = 0.05;
+    this.maxSpeed = 8;
+    this.acceleration = 0.12;
+    this.deceleration = 0.06; // Natural deceleration
+    this.brakingDeceleration = 0.2; // Stronger deceleration when braking
+
     this.effectiveY = this.screenY;
+
+    // I.1.B Particle System Basics
+    this.dustParticles = [];
+    this.exhaustParticles = [];
+    this.speedLines = [];
+
+    // I.1.C Suspension Bobbing
+    // wheelBaseY will be calculated in render
+
+    // I.1.C Slight Tilt
+    this.tiltAngle = 0;
+    this.maxTilt = 0.05; // Radians, small tilt
+    this.tiltSpeed = 0.1;
+
+    // I.1.D Headlights/Taillights
+    this.headlightsOn = false;
+    this.isBraking = false;
+
     if (Config.DEBUG_MODE) console.log("Player initialized.");
   }
 
   update(deltaTime) {
-    let moving = false;
+    let movingIntent = 0; // -1 for left, 1 for right, 0 for no input
     if (Input.isMoveRightPressed()) {
-      this.currentSpeed += this.acceleration;
-      if (this.currentSpeed > this.maxSpeed) this.currentSpeed = this.maxSpeed;
-      moving = true;
+      movingIntent = 1;
     }
     if (Input.isMoveLeftPressed()) {
-      this.currentSpeed -= this.acceleration;
-      if (this.currentSpeed < -this.maxSpeed)
-        this.currentSpeed = -this.maxSpeed;
-      moving = true;
+      movingIntent = -1;
     }
-    if (!moving) {
+
+    this.isBraking = false;
+    if (movingIntent !== 0) {
+      this.currentSpeed += this.acceleration * movingIntent;
+      this.currentSpeed = Math.max(
+        -this.maxSpeed,
+        Math.min(this.maxSpeed, this.currentSpeed)
+      );
+    } else {
+      // Decelerate or brake
       if (this.currentSpeed > 0) {
-        this.currentSpeed -= this.deceleration;
+        // Check if player is trying to move opposite to current direction (braking)
+        if (Input.isMoveLeftPressed()) {
+          // Braking while moving right
+          this.currentSpeed -= this.brakingDeceleration;
+          this.isBraking = true;
+        } else {
+          this.currentSpeed -= this.deceleration; // Natural deceleration
+        }
         if (this.currentSpeed < 0) this.currentSpeed = 0;
       } else if (this.currentSpeed < 0) {
-        this.currentSpeed += this.deceleration;
+        if (Input.isMoveRightPressed()) {
+          // Braking while moving left
+          this.currentSpeed += this.brakingDeceleration;
+          this.isBraking = true;
+        } else {
+          this.currentSpeed += this.deceleration; // Natural deceleration
+        }
         if (this.currentSpeed > 0) this.currentSpeed = 0;
       }
     }
-    this.bobAngle += this.bobSpeed * (60 * deltaTime);
-    const bobOffset = Math.sin(this.bobAngle) * this.bobAmplitude;
+
+    // Tilt logic
+    let targetTilt = 0;
+    if (this.currentSpeed > 0.1 && movingIntent === 1)
+      targetTilt = -this.maxTilt; // Accelerating forward
+    else if (this.currentSpeed < -0.1 && movingIntent === -1)
+      targetTilt = -this.maxTilt; // Accelerating backward (front up)
+    else if (this.isBraking)
+      targetTilt = this.maxTilt * Math.sign(this.currentSpeed) * 1.5; // Braking (front down)
+
+    this.tiltAngle +=
+      (targetTilt - this.tiltAngle) * this.tiltSpeed * (60 * deltaTime);
+
+    // Bobbing
+    this.bobAngle +=
+      this.bobSpeed *
+      (Math.abs(this.currentSpeed) / this.maxSpeed + 0.1) *
+      (60 * deltaTime);
+    const bobOffset =
+      Math.sin(this.bobAngle) *
+      this.bobAmplitude *
+      (Math.abs(this.currentSpeed) > 0.1 ? 1 : 0.5);
     this.effectiveY = this.screenY + bobOffset;
+
+    // Wheel animation
     if (Math.abs(this.currentSpeed) > 0.1) {
       this.wheelFrame +=
         this.wheelAnimationSpeed *
         Math.sign(this.currentSpeed) *
         (60 * deltaTime);
-      if (this.wheelFrame >= 4) this.wheelFrame = 0;
-      if (this.wheelFrame < 0) this.wheelFrame = 3;
+      if (this.wheelFrame >= 8) this.wheelFrame = 0; // Assuming 8 frames for new wheel
+      if (this.wheelFrame < 0) this.wheelFrame = 7;
+    }
+
+    // Headlight toggle
+    if (Input.isToggleHeadlightsJustPressed()) {
+      this.headlightsOn = !this.headlightsOn;
+    }
+
+    // Particle Emission
+    this.emitDustParticles(deltaTime);
+    this.emitExhaustParticles(deltaTime);
+    this.emitSpeedLines(deltaTime);
+
+    // Update Particles
+    this.updateParticles(this.dustParticles, deltaTime);
+    this.updateParticles(this.exhaustParticles, deltaTime);
+    this.updateParticles(this.speedLines, deltaTime);
+  }
+
+  updateParticles(particleArray, deltaTime) {
+    for (let i = particleArray.length - 1; i >= 0; i--) {
+      particleArray[i].update(deltaTime);
+      if (particleArray[i].lifespan <= 0 || particleArray[i].alpha <= 0) {
+        particleArray.splice(i, 1);
+      }
     }
   }
 
-  drawWheel(ctx, x, y, radius, frame) {
-    ctx.fillStyle = "#333333";
-    ctx.beginPath();
-    ctx.arc(Math.floor(x), Math.floor(y), Math.floor(radius), 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = "#777777";
-    ctx.beginPath();
-    ctx.arc(
-      Math.floor(x),
-      Math.floor(y),
-      Math.floor(radius * 0.5),
-      0,
-      Math.PI * 2
-    );
-    ctx.fill();
-    ctx.strokeStyle = "#555555";
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    const angleOffset = (Math.PI / 2) * Math.floor(frame);
-    for (let i = 0; i < 2; i++) {
-      const angle = angleOffset + (i * Math.PI) / 2;
-      ctx.moveTo(
-        Math.floor(x + Math.cos(angle) * radius * 0.2),
-        Math.floor(y + Math.sin(angle) * radius * 0.2)
+  emitDustParticles(deltaTime) {
+    if (
+      Math.abs(this.currentSpeed) > Config.PLAYER_DUST_EMIT_THRESHOLD &&
+      this.dustParticles.length < 50
+    ) {
+      const wheelY = this.screenY + this.height - this.wheelRadius / 2; // Slightly above ground contact
+
+      let particlesToEmit = Math.floor(
+        Math.abs(this.currentSpeed / this.maxSpeed) *
+          Config.MAX_DUST_PARTICLES_PER_FRAME
       );
-      ctx.lineTo(
-        Math.floor(x + Math.cos(angle) * radius * 0.9),
-        Math.floor(y + Math.sin(angle) * radius * 0.9)
-      );
+
+      for (let i = 0; i < particlesToEmit; i++) {
+        const wheelX =
+          this.currentSpeed > 0
+            ? this.screenX + this.width * 0.15 + this.wheelRadius // Rear wheel when moving forward
+            : this.screenX + this.width * 0.75 + this.wheelRadius; // Front wheel when moving backward
+
+        const particle = new Particle(
+          wheelX + getRandomFloat(-this.wheelRadius, this.wheelRadius),
+          wheelY + getRandomFloat(0, this.wheelRadius / 2),
+          -this.currentSpeed * getRandomFloat(0.1, 0.3), // Opposite to car, but slower
+          getRandomFloat(-10, -30), // Upwards initially
+          getRandomFloat(0.5, 1.2),
+          getRandomInt(1, 3),
+          getRandomColor(Palettes.vehicle.DUST_COLOR),
+          getRandomFloat(0.3, 0.6),
+          "dust"
+        );
+        particle.gravity = 20; // Dust settles
+        this.dustParticles.push(particle);
+      }
     }
-    ctx.stroke();
+  }
+
+  emitExhaustParticles(deltaTime) {
+    const isAccelerating =
+      Math.abs(this.currentSpeed) > Config.PLAYER_EXHAUST_EMIT_THRESHOLD &&
+      ((this.currentSpeed > 0 && Input.isMoveRightPressed()) ||
+        (this.currentSpeed < 0 && Input.isMoveLeftPressed()));
+
+    if (isAccelerating && this.exhaustParticles.length < 30) {
+      let particlesToEmit = Config.MAX_EXHAUST_PARTICLES_PER_FRAME;
+      for (let i = 0; i < particlesToEmit; i++) {
+        const exhaustOffsetX =
+          this.currentSpeed >= 0 ? this.width * 0.05 : this.width * 0.95; // Rear or front based on direction
+        const particle = new Particle(
+          this.screenX + exhaustOffsetX,
+          this.effectiveY + this.height * 0.6, // Exhaust pipe position
+          this.currentSpeed * 0.3 + getRandomFloat(-5, 5), // Moves with car slightly
+          getRandomFloat(-15, -5), // Upwards and slightly back
+          getRandomFloat(0.3, 0.8),
+          getRandomInt(1, 3),
+          getRandomColor(Palettes.vehicle.EXHAUST_SMOKE),
+          getRandomFloat(0.2, 0.5),
+          "exhaust"
+        );
+        particle.gravity = -5; // Smoke rises slowly
+        particle.drag = 0.98;
+        this.exhaustParticles.push(particle);
+      }
+    }
+  }
+
+  emitSpeedLines(deltaTime) {
+    if (
+      Math.abs(this.currentSpeed) > Config.PLAYER_SPEED_LINE_THRESHOLD &&
+      this.speedLines.length < 20
+    ) {
+      let linesToEmit = Math.floor(
+        Math.abs(this.currentSpeed / this.maxSpeed) *
+          Config.MAX_SPEED_LINES_PER_FRAME
+      );
+      for (let i = 0; i < linesToEmit; i++) {
+        const side = Math.random() < 0.5 ? -1 : 1; // -1 for left, 1 for right
+        const particle = new Particle(
+          this.screenX +
+            this.width / 2 +
+            side * Config.CANVAS_WIDTH * getRandomFloat(0.3, 0.6),
+          this.screenY +
+            this.height / 2 +
+            getRandomFloat(-this.height * 0.5, this.height * 0.5),
+          -this.currentSpeed * getRandomFloat(1.5, 2.5), // Faster than car, opposite direction
+          0, // Horizontal lines
+          getRandomFloat(0.1, 0.3),
+          getRandomInt(1, 2), // Thickness
+          `rgba(200,200,220,${getRandomFloat(0.3, 0.7)})`,
+          1.0, // Alpha handled by particle itself
+          "speedline"
+        );
+        this.speedLines.push(particle);
+      }
+    }
+  }
+
+  // I.1.A Player Vehicle: Refined Pixel Art Assets
+  // I.1.C Wheel Rotation (More Frames)
+  drawWheel(ctx, x, y, radius, frame) {
+    const wheelColors = Palettes.vehicle;
+    // Simplified 8-frame rotation (4 unique designs, mirrored or slightly shifted for 8)
+    const currentFrame = Math.floor(frame) % 8;
+
+    // Tire
+    drawPixelRect(
+      ctx,
+      x - radius,
+      y - radius,
+      radius * 2,
+      radius * 2,
+      wheelColors.CAR_TIRE_DARK
+    );
+    drawPixelRect(
+      ctx,
+      x - radius + 1,
+      y - radius + 1,
+      radius * 2 - 2,
+      radius * 2 - 2,
+      wheelColors.CAR_TIRE_LIGHT
+    );
+
+    // Hubcap
+    const hubRadius = radius * 0.6;
+    drawPixelRect(
+      ctx,
+      x - hubRadius,
+      y - hubRadius,
+      hubRadius * 2,
+      hubRadius * 2,
+      wheelColors.CAR_BODY_ACCENT
+    );
+    drawPixelRect(
+      ctx,
+      x - hubRadius + 1,
+      y - hubRadius + 1,
+      hubRadius * 2 - 2,
+      hubRadius * 2 - 2,
+      lightenDarkenColor(wheelColors.CAR_BODY_ACCENT, 20)
+    );
+
+    // Spokes (example for 8 frames)
+    ctx.strokeStyle = wheelColors.CAR_TIRE_DARK;
+    ctx.lineWidth = Math.max(1, Math.floor(radius / 4));
+
+    const angleOffset = (Math.PI / 4) * currentFrame; // For 8 spokes/positions
+    for (let i = 0; i < 2; i++) {
+      // Two main spokes, 90 deg apart
+      const angle = angleOffset + (i * Math.PI) / 2;
+      const startX = x + Math.cos(angle) * hubRadius * 0.5;
+      const startY = y + Math.sin(angle) * hubRadius * 0.5;
+      const endX = x + Math.cos(angle) * radius * 0.9;
+      const endY = y + Math.sin(angle) * radius * 0.9;
+      ctx.beginPath();
+      ctx.moveTo(Math.floor(startX), Math.floor(startY));
+      ctx.lineTo(Math.floor(endX), Math.floor(endY));
+      ctx.stroke();
+    }
   }
 
   render(ctx) {
+    // Render particles behind player
+    this.dustParticles.forEach((p) => p.render(ctx));
+    this.exhaustParticles.forEach((p) => p.render(ctx));
+    // Speed lines are often better rendered over some background layers but behind player.
+    // For simplicity, rendering them here. Could be moved to world rendering.
+    this.speedLines.forEach((p) => p.render(ctx));
+
     const carX = this.screenX;
-    const carY = this.effectiveY;
+    // I.1.C Suspension Bobbing: Body uses effectiveY, wheels use a non-bobbing Y.
+    const bodyY = this.effectiveY;
+    const wheelBaseY = this.screenY + this.height - this.wheelRadius; // Non-bobbing Y for wheels
+
+    const carColors = Palettes.vehicle;
+
+    // Apply tilt - this is a simplified approach.
+    // For a real pixel art tilt, you'd likely have pre-drawn tilted sprites or more complex pixel shifting.
+    // This example will shift parts of the car vertically.
+    const frontTiltOffset = Math.sin(this.tiltAngle) * (this.width / 2);
+    const rearTiltOffset = -Math.sin(this.tiltAngle) * (this.width / 2);
+
+    // Player Shadow (I.2.B)
     drawPixelRect(
       ctx,
-      carX,
-      carY,
-      this.width,
-      this.height - this.wheelRadius,
-      "#AA3333"
+      carX + 5,
+      wheelBaseY + this.wheelRadius - 3, // Positioned under the wheels
+      this.width - 10,
+      6, // Shadow height
+      "rgba(0, 0, 0, 0.2)"
     );
-    drawPixelRect(
-      ctx,
-      carX + this.width * 0.25,
-      carY - this.height * 0.3,
-      this.width * 0.5,
-      this.height * 0.4,
-      "#77AADD"
-    );
-    drawPixelRect(
-      ctx,
-      carX + this.width * 0.2,
-      carY - this.height * 0.3 - 5,
-      this.width * 0.6,
-      5,
-      "#882222"
-    );
-    drawPixelRect(
-      ctx,
-      carX + this.width - 5,
-      carY + this.height * 0.2,
-      5,
-      6,
-      "#FFFFDD"
-    );
-    drawPixelRect(ctx, carX, carY + this.height * 0.2, 5, 6, "#FF5555");
-    const wheelY = carY + this.height - this.wheelRadius;
+
+    // Wheels (drawn first, at non-bobbing Y)
     const frontWheelX = carX + this.width * 0.2;
-    const rearWheelX = carX + this.width * 0.8 - this.wheelRadius * 2;
+    const rearWheelX = carX + this.width * 0.8 - this.wheelRadius * 2; // Adjusted for new width
+
     this.drawWheel(
       ctx,
       frontWheelX + this.wheelRadius,
-      wheelY,
+      wheelBaseY,
       this.wheelRadius,
       this.wheelFrame
     );
     this.drawWheel(
       ctx,
       rearWheelX + this.wheelRadius,
-      wheelY,
+      wheelBaseY,
       this.wheelRadius,
       this.wheelFrame
     );
+
+    // Car Body - More detailed pixel art car (I.1.A)
+    // Layered approach:
+    // 1. Undercarriage
+    drawPixelRect(
+      ctx,
+      carX,
+      bodyY + this.height * 0.75 + rearTiltOffset / 4,
+      this.width,
+      this.height * 0.25,
+      carColors.CAR_UNDERCARRIAGE
+    );
+
+    // 2. Main Body
+    const mainBodyHeight = this.height * 0.65;
+    drawPixelRect(
+      ctx,
+      carX,
+      bodyY + this.height * 0.1 + rearTiltOffset / 2,
+      this.width,
+      mainBodyHeight,
+      carColors.CAR_BODY_MAIN
+    );
+    // Highlight on body
+    drawPixelRect(
+      ctx,
+      carX + this.width * 0.1,
+      bodyY + this.height * 0.15 + rearTiltOffset / 2,
+      this.width * 0.8,
+      mainBodyHeight * 0.2,
+      lightenDarkenColor(carColors.CAR_BODY_MAIN, 20)
+    );
+
+    // 3. Cabin/Windows
+    const cabinHeight = this.height * 0.5;
+    const cabinWidth = this.width * 0.6;
+    const cabinX = carX + this.width * 0.2;
+    const cabinY = bodyY - cabinHeight * 0.4 + frontTiltOffset / 2; // Position cabin relative to main body top
+
+    drawPixelRect(
+      ctx,
+      cabinX,
+      cabinY,
+      cabinWidth,
+      cabinHeight,
+      carColors.CAR_ROOF
+    ); // Cabin structure first
+
+    // Windows (inset within cabin structure)
+    const windowInset = 4;
+    const windowHeight = cabinHeight - windowInset * 1.5;
+    // Windshield (slanted)
+    ctx.fillStyle = carColors.CAR_WINDOW;
+    ctx.beginPath();
+    ctx.moveTo(cabinX + windowInset + cabinWidth * 0.3, cabinY + windowInset); // Top-leftish
+    ctx.lineTo(cabinX + windowInset, cabinY + windowHeight); // Bottom-left
+    ctx.lineTo(cabinX + windowInset + cabinWidth * 0.35, cabinY + windowHeight); // Bottom-rightish
+    ctx.lineTo(cabinX + windowInset + cabinWidth * 0.45, cabinY + windowInset); // Top-right
+    ctx.closePath();
+    ctx.fill();
+
+    // Side Window
+    drawPixelRect(
+      ctx,
+      cabinX + cabinWidth * 0.45,
+      cabinY + windowInset,
+      cabinWidth * 0.5 - windowInset,
+      windowHeight,
+      carColors.CAR_WINDOW
+    );
+
+    // Pillars (A, B)
+    drawPixelRect(
+      ctx,
+      cabinX + cabinWidth * 0.35,
+      cabinY + windowInset,
+      5,
+      windowHeight,
+      carColors.CAR_ROOF
+    ); // B-Pillar
+
+    // 4. Roof
+    drawPixelRect(ctx, cabinX, cabinY - 5, cabinWidth, 5, carColors.CAR_ROOF);
+    drawPixelRect(
+      ctx,
+      cabinX + 2,
+      cabinY - 7,
+      cabinWidth - 4,
+      2,
+      lightenDarkenColor(carColors.CAR_ROOF, 15)
+    );
+
+    // Headlights & Taillights (I.1.D)
+    const lightSize = { w: 6, h: 4 };
+    // Headlights
+    const headlightY = bodyY + this.height * 0.25 + frontTiltOffset;
+    if (this.headlightsOn) {
+      drawPixelRect(
+        ctx,
+        carX + this.width - lightSize.w - 5,
+        headlightY,
+        lightSize.w,
+        lightSize.h,
+        carColors.CAR_HEADLIGHT_ON
+      );
+      // Optional light cone (very simple)
+      ctx.globalAlpha = 0.1;
+      ctx.fillStyle = carColors.CAR_HEADLIGHT_ON;
+      ctx.beginPath();
+      ctx.moveTo(carX + this.width - 5, headlightY + lightSize.h / 2);
+      ctx.lineTo(carX + this.width + 50, headlightY - 10);
+      ctx.lineTo(carX + this.width + 50, headlightY + lightSize.h + 10);
+      ctx.closePath();
+      ctx.fill();
+      ctx.globalAlpha = 1.0;
+    } else {
+      drawPixelRect(
+        ctx,
+        carX + this.width - lightSize.w - 5,
+        headlightY,
+        lightSize.w,
+        lightSize.h,
+        carColors.CAR_HEADLIGHT_OFF
+      );
+    }
+
+    // Taillights
+    const taillightY = bodyY + this.height * 0.25 + rearTiltOffset;
+    let taillightColor = this.isBraking
+      ? carColors.CAR_TAILLIGHT_BRAKE
+      : carColors.CAR_TAILLIGHT_ON;
+    if (!this.headlightsOn && !this.isBraking)
+      taillightColor = carColors.CAR_TAILLIGHT_OFF; // Off if headlights are off and not braking
+
+    drawPixelRect(
+      ctx,
+      carX + 5,
+      taillightY,
+      lightSize.w,
+      lightSize.h,
+      taillightColor
+    );
+    if (
+      (this.headlightsOn || this.isBraking) &&
+      taillightColor !== carColors.CAR_TAILLIGHT_OFF
+    ) {
+      // Optional glow for taillights
+      ctx.globalAlpha = 0.2;
+      drawPixelRect(
+        ctx,
+        carX + 3,
+        taillightY - 1,
+        lightSize.w + 4,
+        lightSize.h + 2,
+        taillightColor
+      );
+      ctx.globalAlpha = 1.0;
+    }
+
     if (Config.DEBUG_MODE) {
       ctx.strokeStyle = "lime";
       ctx.lineWidth = 1;
       ctx.strokeRect(
         Math.floor(carX),
-        Math.floor(carY),
+        Math.floor(bodyY), // Use bodyY for debug rect
         this.width,
         this.height
       );
       ctx.fillStyle = "white";
-      ctx.font = "12px Courier New";
-      ctx.fillText(`Speed: ${this.currentSpeed.toFixed(2)}`, carX, carY - 10);
+      ctx.font = "12px Courier New"; // Will be replaced by pixel font later
+      ctx.fillText(`Speed: ${this.currentSpeed.toFixed(2)}`, carX, bodyY - 25);
+      ctx.fillText(`Tilt: ${this.tiltAngle.toFixed(3)}`, carX, bodyY - 10);
     }
   }
 }
@@ -358,9 +963,31 @@ class Player {
 ---
 // js/stops.js
 const StopMarkers = {
-  drawDefaultMarker: (ctx, x, y, isActive) => {
-    drawPixelRect(ctx, x - 15, y - 60, 30, 60, isActive ? "yellow" : "orange");
-    drawPixelRect(ctx, x - 12, y - 55, 24, 30, isActive ? "black" : "#333");
+  drawDefaultMarker: (ctx, x, y, isActive, gameTime = 0) => {
+    const baseColor = isActive ? "yellow" : "orange";
+    const detailColor = isActive ? "black" : "#333";
+
+    let pulseFactor = 1.0;
+    if (isActive) {
+      pulseFactor = 1.0 + ((Math.sin(gameTime * 5) + 1) / 2) * 0.1;
+    }
+
+    drawPixelRect(
+      ctx,
+      x - 15 * pulseFactor,
+      y - 60 * pulseFactor,
+      30 * pulseFactor,
+      60 * pulseFactor,
+      baseColor
+    );
+    drawPixelRect(
+      ctx,
+      x - 12 * pulseFactor,
+      y - 55 * pulseFactor,
+      24 * pulseFactor,
+      30 * pulseFactor,
+      detailColor
+    );
     if (isActive) {
       ctx.fillStyle = "yellow";
       ctx.font = "10px Courier New";
@@ -369,15 +996,54 @@ const StopMarkers = {
       ctx.textAlign = "left";
     }
   },
-  drawArcadeCabinet: (ctx, x, y, isActive) => {
-    const cabinetWidth = 30;
-    const cabinetHeight = 50;
-    const screenHeight = 15;
-    const controlPanelHeight = 8;
-    const baseHeight = 5;
-    const mainColor = isActive ? "#FFD700" : "#D3D3D3";
-    const accentColor = "#808080";
-    const screenColor = isActive ? "#00FF00" : "#008000";
+
+  drawArcadeCabinet: (ctx, x, y, isActive, gameTime = 0) => {
+    const themePalette = Palettes.gaming;
+    // More specific check for all required sub-properties
+    if (
+      !themePalette ||
+      !themePalette.objects_primary ||
+      !themePalette.emissive ||
+      !themePalette.props || // Check for props
+      !themePalette.objects_accent
+    ) {
+      // Check for objects_accent
+      console.error(
+        "Arcade Cabinet: Gaming palette or its sub-properties (objects_primary, emissive, props, objects_accent) are undefined!",
+        themePalette
+      );
+      StopMarkers.drawDefaultMarker(ctx, x, y, isActive, gameTime);
+      return;
+    }
+
+    const cabinetWidth = 32;
+    const cabinetHeight = 55;
+    const screenHeight = 18;
+    const controlPanelHeight = 10;
+    const baseHeight = 6;
+
+    let mainColor = themePalette.objects_primary.base;
+    let accentColor = themePalette.objects_primary.shadow;
+    let screenColor =
+      themePalette.emissive && themePalette.emissive.length > 0
+        ? themePalette.emissive[0]
+        : "#FFFF00";
+    let highlightColor = themePalette.objects_primary.light;
+
+    if (isActive) {
+      const pulse = (Math.sin(gameTime * 6) + 1) / 2;
+      mainColor = interpolateColor(
+        themePalette.objects_primary.base,
+        themePalette.objects_primary.light,
+        pulse * 0.5
+      );
+      if (themePalette.emissive && themePalette.emissive.length > 0) {
+        screenColor = getRandomColor(themePalette.emissive);
+      } else {
+        screenColor = "#FFFF00";
+      }
+    }
+
     drawPixelRect(
       ctx,
       x - cabinetWidth / 2,
@@ -396,178 +1062,493 @@ const StopMarkers = {
     );
     drawPixelRect(
       ctx,
-      x - cabinetWidth / 2 - 2,
-      y - baseHeight - controlPanelHeight,
-      cabinetWidth + 4,
-      controlPanelHeight,
-      "#A0522D"
+      x - cabinetWidth / 2,
+      y - cabinetHeight,
+      3,
+      cabinetHeight - baseHeight,
+      accentColor
     );
     drawPixelRect(
       ctx,
+      x + cabinetWidth / 2 - 3,
+      y - cabinetHeight,
+      3,
+      cabinetHeight - baseHeight,
+      highlightColor
+    );
+
+    const cpWidth = cabinetWidth + 6;
+    const controlPanelColor =
+      themePalette.objects_accent && themePalette.objects_accent.length > 0
+        ? themePalette.objects_accent[0]
+        : "#FF00FF";
+    drawPixelRect(
+      ctx,
+      x - cpWidth / 2,
+      y - baseHeight - controlPanelHeight,
+      cpWidth,
+      controlPanelHeight,
+      controlPanelColor
+    );
+    drawPixelRect(
+      ctx,
+      x - 5,
+      y - baseHeight - controlPanelHeight - 6,
+      4,
+      6,
+      accentColor
+    );
+    const joystickTopColor =
+      themePalette.props && themePalette.props.length > 0
+        ? themePalette.props[0]
+        : "#FF0000";
+    drawPixelRect(
+      ctx,
+      x - 6,
+      y - baseHeight - controlPanelHeight - 9,
+      6,
+      3,
+      joystickTopColor
+    );
+
+    const buttonColor1Active =
+      themePalette.props && themePalette.props.length > 1
+        ? themePalette.props[1]
+        : "#FFFF00";
+    const buttonColor1Inactive =
+      themePalette.props && themePalette.props.length > 2
+        ? themePalette.props[2]
+        : "#00FF00";
+    const buttonColor2Active =
+      themePalette.props && themePalette.props.length > 2
+        ? themePalette.props[2]
+        : "#00FF00";
+    const buttonColor2Inactive =
+      themePalette.props && themePalette.props.length > 1
+        ? themePalette.props[1]
+        : "#FFFF00";
+
+    drawPixelRect(
+      ctx,
+      x + 2,
+      y - baseHeight - controlPanelHeight + 3,
+      3,
+      3,
+      isActive ? buttonColor1Active : buttonColor1Inactive
+    );
+    drawPixelRect(
+      ctx,
+      x + 7,
+      y - baseHeight - controlPanelHeight + 3,
+      3,
+      3,
+      isActive ? buttonColor2Active : buttonColor2Inactive
+    );
+
+    drawPixelRect(
+      ctx,
       x - cabinetWidth / 2 + 3,
-      y - cabinetHeight + 3,
+      y - cabinetHeight + 5,
       cabinetWidth - 6,
-      screenHeight + 6,
+      screenHeight + 10,
       accentColor
     );
     drawPixelRect(
       ctx,
       x - cabinetWidth / 2 + 5,
-      y - cabinetHeight + 5,
+      y - cabinetHeight + 7,
       cabinetWidth - 10,
       screenHeight,
-      screenColor
+      "#000000"
     );
+
     if (isActive) {
-      drawPixelRect(
-        ctx,
-        x - cabinetWidth / 2 + 7,
-        y - cabinetHeight + 7,
-        2,
-        2,
-        "#FFFF00"
-      );
-      drawPixelRect(
-        ctx,
-        x - cabinetWidth / 2 + 15,
-        y - cabinetHeight + 10,
-        3,
-        2,
-        "#FF00FF"
-      );
+      const numFrames = 3;
+      const screenFrame = Math.floor(gameTime * 2) % numFrames;
+      const screenPixelSize = 2;
+      const screenContentX = x - cabinetWidth / 2 + 6;
+      const screenContentY = y - cabinetHeight + 8;
+      const activeScreenColor =
+        themePalette.emissive && themePalette.emissive.length > 0
+          ? screenColor
+          : "#FFFF00";
+      const playerShipColor =
+        themePalette.props && themePalette.props.length > 2
+          ? Palettes.gaming.props[2]
+          : "#00FF00";
+
+      if (screenFrame === 0) {
+        drawPixelRect(
+          ctx,
+          screenContentX + 4,
+          screenContentY + 2,
+          screenPixelSize * 2,
+          screenPixelSize,
+          activeScreenColor
+        );
+        drawPixelRect(
+          ctx,
+          screenContentX + 2,
+          screenContentY + 4,
+          screenPixelSize * 4,
+          screenPixelSize,
+          activeScreenColor
+        );
+        drawPixelRect(
+          ctx,
+          screenContentX,
+          screenContentY + 6,
+          screenPixelSize * 6,
+          screenPixelSize,
+          activeScreenColor
+        );
+        drawPixelRect(
+          ctx,
+          screenContentX + 2,
+          screenContentY + 8,
+          screenPixelSize,
+          screenPixelSize,
+          activeScreenColor
+        );
+        drawPixelRect(
+          ctx,
+          screenContentX + 8,
+          screenContentY + 8,
+          screenPixelSize,
+          screenPixelSize,
+          activeScreenColor
+        );
+      } else if (screenFrame === 1) {
+        drawPixelRect(
+          ctx,
+          screenContentX + 6,
+          screenContentY + 10,
+          screenPixelSize * 2,
+          screenPixelSize,
+          playerShipColor
+        );
+        drawPixelRect(
+          ctx,
+          screenContentX + 4,
+          screenContentY + 12,
+          screenPixelSize * 4,
+          screenPixelSize,
+          playerShipColor
+        );
+      } else {
+        const explosionColor =
+          themePalette.emissive && themePalette.emissive.length > 0
+            ? getRandomColor(Palettes.gaming.emissive)
+            : "#FF8C00";
+        drawPixelRect(
+          ctx,
+          screenContentX + 4,
+          screenContentY + 5,
+          screenPixelSize * 3,
+          screenPixelSize * 3,
+          explosionColor
+        );
+      }
     }
+
+    const marqueeHeight = 10;
+    const marqueeAccentColor =
+      themePalette.objects_accent && themePalette.objects_accent.length > 1
+        ? themePalette.objects_accent[1]
+        : "#00FF00";
     drawPixelRect(
       ctx,
-      x - cabinetWidth / 2,
-      y - cabinetHeight - 8,
-      cabinetWidth,
-      8,
-      "#FF6347"
+      x - cabinetWidth / 2 - 2,
+      y - cabinetHeight - marqueeHeight,
+      cabinetWidth + 4,
+      marqueeHeight,
+      marqueeAccentColor
     );
+    const marqueeTextColorActive =
+      themePalette.emissive && themePalette.emissive.length > 2
+        ? themePalette.emissive[2]
+        : "#FF69B4";
     if (isActive) {
-      ctx.fillStyle = "black";
-      ctx.font = "8px Courier New";
-      ctx.textAlign = "center";
-      ctx.fillText("AI", x, y - cabinetHeight - 1);
-      ctx.textAlign = "left";
+      drawPixelRect(
+        ctx,
+        x - 5,
+        y - cabinetHeight - marqueeHeight + 3,
+        10,
+        4,
+        marqueeTextColorActive
+      );
+    } else {
+      drawPixelRect(
+        ctx,
+        x - 5,
+        y - cabinetHeight - marqueeHeight + 3,
+        10,
+        4,
+        themePalette.objects_primary.shadow
+      );
+    }
+
+    if (isActive) {
+      const glowBaseColor =
+        themePalette.emissive && themePalette.emissive.length > 0
+          ? themePalette.emissive[0]
+          : "#FFFF00";
+      ctx.globalAlpha = ((Math.sin(gameTime * 5) + 1) / 2) * 0.3 + 0.1;
+      drawPixelRect(
+        ctx,
+        x - cabinetWidth / 2 - 5,
+        y - cabinetHeight - marqueeHeight - 5,
+        cabinetWidth + 10,
+        cabinetHeight + marqueeHeight + baseHeight + 10,
+        glowBaseColor
+      );
+      ctx.globalAlpha = 1.0;
     }
   },
-  drawHolographicTerminal: (ctx, x, y, isActive) => {
-    const baseWidth = 35;
-    const baseHeight = 8;
-    const postHeight = 25;
-    const screenWidth = 30;
-    const screenHeight = 20;
-    const primaryColor = isActive
-      ? Palettes.futuristic.lights[0]
-      : Palettes.futuristic.accents[1];
-    const accentColor = Palettes.futuristic.buildings[2];
+
+  drawHolographicTerminal: (ctx, x, y, isActive, gameTime = 0) => {
+    const themePalette = Palettes.futuristic;
+    if (
+      !themePalette ||
+      !themePalette.emissive ||
+      !themePalette.objects_primary ||
+      !themePalette.objects_accent
+    ) {
+      console.error(
+        "Holographic Terminal: Futuristic palette or its properties are undefined!",
+        themePalette
+      );
+      StopMarkers.drawDefaultMarker(ctx, x, y, isActive, gameTime);
+      return;
+    }
+
+    const baseWidth = 40;
+    const baseHeight = 10;
+    const postHeight = 20;
+    const screenWidth = 35;
+    const screenHeight = 25;
+
+    let primaryColor =
+      themePalette.emissive && themePalette.emissive.length > 0
+        ? themePalette.emissive[0]
+        : "#00FFFF";
+    let accentColor = themePalette.objects_primary.shadow;
+    let baseStructColor = themePalette.objects_primary.base;
+
+    if (isActive) {
+      const pulse = (Math.sin(gameTime * 4) + 1) / 2;
+      if (themePalette.emissive && themePalette.emissive.length > 1) {
+        primaryColor = interpolateColor(
+          themePalette.emissive[0],
+          themePalette.emissive[1],
+          pulse
+        );
+      } else if (themePalette.emissive && themePalette.emissive.length > 0) {
+        primaryColor = themePalette.emissive[0];
+      } else {
+        primaryColor = "#00FFFF";
+      }
+      baseStructColor = lightenDarkenColor(
+        themePalette.objects_primary.base,
+        Math.floor(pulse * 20)
+      );
+    }
+
     drawPixelRect(
       ctx,
       x - baseWidth / 2,
       y - baseHeight,
       baseWidth,
       baseHeight,
+      baseStructColor
+    );
+    drawPixelRect(
+      ctx,
+      x - baseWidth / 2 + 2,
+      y - baseHeight + 2,
+      baseWidth - 4,
+      baseHeight - 4,
       accentColor
     );
     drawPixelRect(
       ctx,
-      x - 3,
+      x - 4,
       y - baseHeight - postHeight,
-      6,
+      8,
       postHeight,
-      accentColor
+      baseStructColor
     );
+
     const screenY = y - baseHeight - postHeight - screenHeight;
-    if (isActive) {
-      ctx.globalAlpha = 0.3;
+
+    const numLayers = isActive ? 4 : 2;
+    for (let i = 0; i < numLayers; i++) {
+      const layerAlpha = isActive ? 0.2 + i * 0.15 : 0.3 + i * 0.1;
+      const layerOffset = isActive ? Math.sin(gameTime * 2 + i) * 3 : 0;
+      const layerWidth = screenWidth + i * 4;
+      const layerHeight = screenHeight + i * 2;
+
+      ctx.globalAlpha = layerAlpha;
       drawPixelRect(
         ctx,
-        x - screenWidth / 2 - 5,
-        screenY - 5,
-        screenWidth + 10,
-        screenHeight + 10,
-        Palettes.futuristic.lights[0]
-      );
-      ctx.globalAlpha = 0.6;
-      drawPixelRect(
-        ctx,
-        x - screenWidth / 2 - 2,
-        screenY - 2,
-        screenWidth + 4,
-        screenHeight + 4,
-        Palettes.futuristic.lights[0]
+        x - layerWidth / 2,
+        screenY - i * 2 + layerOffset,
+        layerWidth,
+        layerHeight,
+        primaryColor
       );
       ctx.globalAlpha = 1.0;
     }
-    drawPixelRect(
-      ctx,
-      x - screenWidth / 2,
-      screenY,
-      screenWidth,
-      screenHeight,
-      primaryColor
-    );
+
+    const strokeStyleColor =
+      themePalette.objects_accent && themePalette.objects_accent.length > 0
+        ? themePalette.objects_accent[0]
+        : themePalette.objects_primary.light;
     ctx.strokeStyle = isActive
-      ? Palettes.futuristic.accents[0]
-      : Palettes.futuristic.buildings[1];
+      ? strokeStyleColor
+      : themePalette.objects_primary.light;
     ctx.lineWidth = 1;
-    for (let i = 0; i < 3; i++) {
-      const lineY = screenY + 5 + i * 5;
+    const lineCount = 5;
+    for (let i = 0; i < lineCount; i++) {
+      const lineYVal = screenY + 4 + i * (screenHeight / lineCount);
+      const scrollOffset = isActive ? (gameTime * 15 + i * 5) % screenWidth : 0;
       ctx.beginPath();
-      ctx.moveTo(Math.floor(x - screenWidth / 2 + 3), Math.floor(lineY));
+      ctx.moveTo(
+        Math.floor(x - screenWidth / 2 + 3 + scrollOffset),
+        Math.floor(lineYVal)
+      );
       ctx.lineTo(
-        Math.floor(x + screenWidth / 2 - 3),
-        Math.floor(lineY + (Math.random() - 0.5) * 2)
+        Math.floor(x - screenWidth / 2 + 3 + scrollOffset - 10),
+        Math.floor(lineYVal)
       );
       ctx.stroke();
+
+      if (isActive && Math.random() < 0.3) {
+        const glyphColor =
+          themePalette.emissive && themePalette.emissive.length > 2
+            ? themePalette.emissive[2]
+            : "#FFFF00";
+        drawPixelRect(
+          ctx,
+          x - screenWidth / 2 + getRandomInt(5, screenWidth - 10),
+          lineYVal - 2,
+          2,
+          2,
+          glyphColor
+        );
+      }
     }
+
     if (isActive) {
+      ctx.globalAlpha = ((Math.sin(gameTime * 5) + 1) / 2) * 0.2 + 0.1;
       drawPixelRect(
         ctx,
-        x - screenWidth / 2 + 5,
-        screenY + 3,
-        3,
-        3,
-        Palettes.futuristic.lights[1]
+        x - screenWidth / 2 - 10,
+        screenY - 10,
+        screenWidth + 20,
+        screenHeight + 20,
+        primaryColor
       );
-      drawPixelRect(
-        ctx,
-        x + screenWidth / 2 - 8,
-        screenY + screenHeight - 6,
-        3,
-        3,
-        Palettes.futuristic.lights[2]
-      );
+      ctx.globalAlpha = 1.0;
     }
   },
-  drawPixelWarehouse: (ctx, x, y, isActive) => {
-    const buildingWidth = 50;
-    const buildingHeight = 40;
-    const roofHeight = 10;
-    const doorWidth = 15;
-    const doorHeight = 25;
-    const mainColor = isActive
-      ? Palettes.industrial.metal[1]
-      : Palettes.industrial.buildings[0];
-    const roofColor = Palettes.industrial.buildings[2];
-    const doorColor = Palettes.industrial.metal[2];
+
+  drawPixelWarehouse: (ctx, x, y, isActive, gameTime = 0) => {
+    const themePalette = Palettes.industrial;
+    if (
+      !themePalette ||
+      !themePalette.objects_primary ||
+      !themePalette.objects_accent ||
+      !themePalette.emissive
+    ) {
+      console.error(
+        "Pixel Warehouse: Industrial palette or its properties are undefined!",
+        themePalette
+      );
+      StopMarkers.drawDefaultMarker(ctx, x, y, isActive, gameTime);
+      return;
+    }
+
+    const buildingWidth = 55;
+    const buildingHeight = 45;
+    const roofHeight = 12;
+    const doorWidth = 18;
+    const doorHeight = 28;
+
+    let mainColor = themePalette.objects_primary.base;
+    let roofColor = themePalette.objects_primary.shadow;
+    let doorColor =
+      themePalette.objects_accent && themePalette.objects_accent.length > 1
+        ? themePalette.objects_accent[1]
+        : "#A0522D";
+    let highlightColor = themePalette.objects_primary.light;
+
+    if (isActive) {
+      const pulse = (Math.sin(gameTime * 3) + 1) / 2;
+      mainColor = lightenDarkenColor(
+        themePalette.objects_primary.base,
+        Math.floor(pulse * 10)
+      );
+      if (
+        themePalette.objects_accent &&
+        themePalette.objects_accent.length > 1 &&
+        themePalette.emissive &&
+        themePalette.emissive.length > 0
+      ) {
+        doorColor = interpolateColor(
+          themePalette.objects_accent[1],
+          themePalette.emissive[0],
+          pulse
+        );
+      } else {
+        doorColor = "#FFA500";
+      }
+    }
+
     drawPixelRect(
       ctx,
       x - buildingWidth / 2,
       y - buildingHeight,
-      buildingWidth,
+      buildingWidth / 3,
+      buildingHeight,
+      themePalette.objects_primary.shadow
+    );
+    drawPixelRect(
+      ctx,
+      x - buildingWidth / 2 + buildingWidth / 3,
+      y - buildingHeight,
+      buildingWidth / 3,
       buildingHeight,
       mainColor
     );
+    drawPixelRect(
+      ctx,
+      x - buildingWidth / 2 + (buildingWidth * 2) / 3,
+      y - buildingHeight,
+      buildingWidth / 3,
+      buildingHeight,
+      highlightColor
+    );
+
+    for (let i = 0; i < buildingHeight; i += 4) {
+      drawPixelRect(
+        ctx,
+        x - buildingWidth / 2,
+        y - buildingHeight + i,
+        buildingWidth,
+        1,
+        lightenDarkenColor(mainColor, -20)
+      );
+    }
+
     ctx.fillStyle = roofColor;
     ctx.beginPath();
     ctx.moveTo(
-      Math.floor(x - buildingWidth / 2 - 5),
+      Math.floor(x - buildingWidth / 2 - 3),
       Math.floor(y - buildingHeight)
     );
     ctx.lineTo(
-      Math.floor(x + buildingWidth / 2 + 5),
+      Math.floor(x + buildingWidth / 2 + 3),
       Math.floor(y - buildingHeight)
     );
     ctx.lineTo(
@@ -582,61 +1563,122 @@ const StopMarkers = {
     ctx.fill();
     drawPixelRect(
       ctx,
-      x - doorWidth / 2,
-      y - doorHeight,
-      doorWidth,
-      doorHeight,
-      doorColor
+      x - buildingWidth / 2,
+      y - buildingHeight - roofHeight,
+      buildingWidth,
+      2,
+      lightenDarkenColor(roofColor, 20)
     );
+
+    const doorX = x - doorWidth / 2;
+    const doorY = y - doorHeight;
+    drawPixelRect(ctx, doorX, doorY, doorWidth, doorHeight, doorColor);
+    for (let i = 0; i < doorHeight; i += 6) {
+      drawPixelRect(
+        ctx,
+        doorX,
+        doorY + i,
+        doorWidth,
+        2,
+        lightenDarkenColor(doorColor, -30)
+      );
+    }
     drawPixelRect(
       ctx,
-      x - doorWidth / 2,
-      y - doorHeight + 5,
-      doorWidth,
+      doorX + doorWidth / 2 - 2,
+      doorY + doorHeight * 0.7,
+      4,
       2,
-      lightenDarkenColor(doorColor, -30)
+      lightenDarkenColor(doorColor, -50)
     );
-    drawPixelRect(
-      ctx,
-      x - doorWidth / 2,
-      y - doorHeight + 12,
-      doorWidth,
-      2,
-      lightenDarkenColor(doorColor, -30)
-    );
+
     if (isActive) {
+      const lightOn = Math.floor(gameTime * 2) % 2 === 0;
+      const activeLightColor =
+        themePalette.emissive && themePalette.emissive.length > 0
+          ? themePalette.emissive[0]
+          : "#FFA500";
+      if (lightOn) {
+        drawPixelRect(
+          ctx,
+          x - 2,
+          y - buildingHeight - roofHeight - 5,
+          4,
+          3,
+          activeLightColor
+        );
+        ctx.globalAlpha = 0.3;
+        drawPixelRect(
+          ctx,
+          x - 4,
+          y - buildingHeight - roofHeight - 2,
+          8,
+          5,
+          activeLightColor
+        );
+        ctx.globalAlpha = 1.0;
+      } else {
+        drawPixelRect(
+          ctx,
+          x - 2,
+          y - buildingHeight - roofHeight - 5,
+          4,
+          3,
+          themePalette.objects_primary.shadow
+        );
+      }
+    }
+
+    const signAccentColor =
+      themePalette.objects_accent && themePalette.objects_accent.length > 0
+        ? themePalette.objects_accent[0]
+        : "#B7410E";
+    const signEmissiveColor =
+      themePalette.emissive && themePalette.emissive.length > 1
+        ? themePalette.emissive[1]
+        : "#FFD700";
+    drawPixelRect(
+      ctx,
+      x + buildingWidth / 2 - 15,
+      y - buildingHeight + 5,
+      10,
+      8,
+      themePalette.objects_primary.shadow
+    );
+    drawPixelRect(
+      ctx,
+      x + buildingWidth / 2 - 14,
+      y - buildingHeight + 6,
+      8,
+      6,
+      isActive ? signEmissiveColor : signAccentColor
+    );
+
+    if (isActive) {
+      const glowColorActive =
+        themePalette.emissive && themePalette.emissive.length > 1
+          ? themePalette.emissive[1]
+          : "#FFD700";
+      ctx.globalAlpha = ((Math.sin(gameTime * 5) + 1) / 2) * 0.15;
       drawPixelRect(
         ctx,
-        x + doorWidth / 2 + 3,
-        y - doorHeight + 3,
-        5,
-        5,
-        Palettes.gaming.props[1]
+        x - buildingWidth / 2 - 5,
+        y - buildingHeight - roofHeight - 5,
+        buildingWidth + 10,
+        buildingHeight + roofHeight + 10,
+        glowColorActive
       );
-      drawPixelRect(
-        ctx,
-        x - buildingWidth / 2 - 10,
-        y - 10,
-        8,
-        10,
-        Palettes.desert[2]
-      );
-      drawPixelRect(
-        ctx,
-        x - buildingWidth / 2 - 12,
-        y - 15,
-        10,
-        5,
-        Palettes.desert[1]
-      );
+      ctx.globalAlpha = 1.0;
     }
   },
 };
 
 const StopsManager = {
   stops: [],
-  activeStop: null, // Used for visual highlighting of the marker
-  stopActivationRange: 100, // Proximity to marker for visual activation
+  activeStop: null,
+  stopActivationRange: 120,
+  zoneEntryLeadDistance: Config.CANVAS_WIDTH * 1.25,
+
   init() {
     const initialStopPosition = 2500;
     const distanceBetweenStops = 4500;
@@ -646,7 +1688,7 @@ const StopsManager = {
         id: "project_ai_game",
         worldPositionX: initialStopPosition,
         theme: "gaming",
-        promptText: "AI Game Project Details", // Original prompt, less used now for main UI
+        promptText: "AI Game Project",
         markerAssetFunction: StopMarkers.drawArcadeCabinet,
         markerScreenYOffset: 0,
         isReached: false,
@@ -655,7 +1697,7 @@ const StopsManager = {
         id: "project_ai_ta",
         worldPositionX: initialStopPosition + distanceBetweenStops,
         theme: "futuristic",
-        promptText: "AI TA Project Details",
+        promptText: "AI TA Project",
         markerAssetFunction: StopMarkers.drawHolographicTerminal,
         markerScreenYOffset: 0,
         isReached: false,
@@ -664,7 +1706,7 @@ const StopsManager = {
         id: "project_truck_parts",
         worldPositionX: initialStopPosition + 2 * distanceBetweenStops,
         theme: "industrial",
-        promptText: "Truck Parts Project Details",
+        promptText: "Truck Parts Project",
         markerAssetFunction: StopMarkers.drawPixelWarehouse,
         markerScreenYOffset: 0,
         isReached: false,
@@ -675,54 +1717,62 @@ const StopsManager = {
         "StopsManager initialized with " + this.stops.length + " stops."
       );
   },
-  update(worldCurrentX, playerScreenX, playerWidth) {
-    // Update activeStop for marker visuals (e.g., making the marker glow)
+
+  update(worldCurrentX, playerScreenX, playerWidth, game) {
     this.activeStop = null;
     const playerWorldCenterX = worldCurrentX + playerScreenX + playerWidth / 2;
+
     for (const stop of this.stops) {
       const distanceToStopMarker = Math.abs(
         playerWorldCenterX - stop.worldPositionX
       );
       if (distanceToStopMarker < this.stopActivationRange / 2) {
         this.activeStop = stop;
+        if (Input.isInteractJustPressed()) {
+          const linkURL = Config.STOP_LINKS[stop.id];
+          if (linkURL) {
+            if (Config.DEBUG_MODE) {
+              console.log(
+                `Interacting with stop: ${stop.promptText}, opening URL: ${linkURL}`
+              );
+            }
+            window.open(linkURL, "_blank");
+          }
+        }
         break;
       }
     }
-
-    // Handle zone-based interaction
-    const currentZone = this.getCurrentZone(worldCurrentX);
-    if (currentZone && currentZone.linkURL && Input.isInteractPressed()) {
-      // Debounce the interaction
-      Config.KeyBindings.INTERACT.forEach((key) => (Input.keys[key] = false));
-      if (Config.DEBUG_MODE) {
-        console.log(
-          `Interacting with zone: ${currentZone.name}, opening URL: ${currentZone.linkURL}`
-        );
-      }
-      window.open(currentZone.linkURL, "_blank");
-    }
   },
-  render(ctx, worldCurrentX, playerGroundY) {
+
+  render(ctx, worldCurrentX, playerGroundY, gameTime) {
     this.stops.forEach((stop) => {
       const stopScreenX = stop.worldPositionX - worldCurrentX;
       if (
-        stopScreenX > -this.stopActivationRange * 2 &&
-        stopScreenX < Config.CANVAS_WIDTH + this.stopActivationRange * 2
+        stopScreenX > -this.stopActivationRange * 3 &&
+        stopScreenX < Config.CANVAS_WIDTH + this.stopActivationRange * 3
       ) {
         const markerY = playerGroundY + stop.markerScreenYOffset;
-        // isActive is true if the player is near this specific marker
         const isActiveMarker =
           this.activeStop && this.activeStop.id === stop.id;
+
         if (typeof stop.markerAssetFunction === "function") {
-          stop.markerAssetFunction(ctx, stopScreenX, markerY, isActiveMarker);
+          stop.markerAssetFunction(
+            ctx,
+            stopScreenX,
+            markerY,
+            isActiveMarker,
+            gameTime
+          );
         } else {
           StopMarkers.drawDefaultMarker(
             ctx,
             stopScreenX,
             markerY,
-            isActiveMarker
+            isActiveMarker,
+            gameTime
           );
         }
+
         if (Config.DEBUG_MODE && isActiveMarker) {
           ctx.strokeStyle = "yellow";
           ctx.lineWidth = 1;
@@ -740,37 +1790,30 @@ const StopsManager = {
       }
     });
   },
+
   getCurrentZone(worldCurrentX) {
     let currentZone = {
-      name: "The Wasteland",
+      name: "The Long Road",
       theme: "desert_start",
-      skyColor: Palettes.desert[4],
-      linkURL: null,
+      skyColor: (Palettes.desert.sky && Palettes.desert.sky[0]) || "#FAD7A0",
+      promptText: "Portfolio Drive",
       stopId: null,
     };
 
-    const zoneEntryLeadDistance = Config.CANVAS_WIDTH * 1.25;
-
     for (let i = this.stops.length - 1; i >= 0; i--) {
       const stop = this.stops[i];
-      const zoneEntryPosition = stop.worldPositionX - zoneEntryLeadDistance;
+      const zoneStartPos = stop.worldPositionX - this.zoneEntryLeadDistance;
 
-      if (worldCurrentX >= zoneEntryPosition) {
-        let skyColor = Palettes.desert[4]; // Default sky
-        if (stop.theme === "gaming") skyColor = Palettes.gaming.sky[0];
-        else if (stop.theme === "futuristic")
-          skyColor = Palettes.futuristic.sky[0];
-        else if (stop.theme === "industrial")
-          skyColor = Palettes.industrial.sky[0];
-
+      if (worldCurrentX >= zoneStartPos) {
+        let themePalette = Palettes[stop.theme] || Palettes.desert;
         currentZone = {
           name: `${
             stop.theme.charAt(0).toUpperCase() + stop.theme.slice(1)
-          } Zone`,
+          } Sector`,
           theme: stop.theme,
-          skyColor: skyColor,
-          linkURL: Config.STOP_LINKS[stop.id], // Reference link from Config
-          stopId: stop.id, // Include the stop ID for reference
+          skyColor: (themePalette.sky && themePalette.sky[0]) || "#87CEEB",
+          promptText: stop.promptText,
+          stopId: stop.id,
         };
         break;
       }
@@ -778,14 +1821,15 @@ const StopsManager = {
 
     if (this.stops.length > 0) {
       const firstStop = this.stops[0];
-      const firstZoneEntryPosition =
-        firstStop.worldPositionX - zoneEntryLeadDistance;
-      if (worldCurrentX < firstZoneEntryPosition) {
+      const firstZoneStartPos =
+        firstStop.worldPositionX - this.zoneEntryLeadDistance;
+      if (worldCurrentX < firstZoneStartPos) {
         currentZone = {
-          name: "Desert Drive",
+          name: "Desert Approach",
           theme: "desert_start",
-          skyColor: Palettes.desert[4],
-          linkURL: null,
+          skyColor:
+            (Palettes.desert.sky && Palettes.desert.sky[0]) || "#FAD7A0",
+          promptText: "The Journey Begins...",
           stopId: null,
         };
       }
@@ -803,135 +1847,410 @@ StopsManager.init();
 class UI {
   constructor(game) {
     this.game = game;
-    this.height = 50;
+    this.height = 60; // Increased height for more space
     this.yPosition = Config.CANVAS_HEIGHT - this.height;
-    this.backgroundColor = "rgba(0, 0, 0, 0.8)";
-    this.borderColor = "#333333";
-    this.textColor = "#A0D0A0";
-    this.font = '16px "Courier New", Courier, monospace';
-    this.infoScreenWidth = 300;
-    this.infoScreenHeight = 30;
+    this.backgroundColor = "rgba(10, 20, 10, 0.85)"; // Darker, slightly green
+    this.borderColor = Palettes.ui.FRAME_DARK; // Using new palette
+    this.textColor = "#B0E0B0"; // Lighter green text
+
+    // Using a basic pixel font rendering for now
+    this.fontSettings = {
+      charHeight: PixelFontData.charHeight,
+      charSpacing: PixelFontData.charSpacing,
+      lineHeight: PixelFontData.lineHeight,
+      scale: 2, // Scale up the pixel font
+    };
+
+    this.infoScreenWidth = 350; // Wider info screen
+    this.infoScreenHeight = 28; // Adjusted height
     this.infoScreenX = (Config.CANVAS_WIDTH - this.infoScreenWidth) / 2;
     this.infoScreenY =
-      this.yPosition + (this.height - this.infoScreenHeight) / 2;
-    this.infoScreenColor = "#102010";
-    this.infoScreenBorderColor = "#204020";
+      this.yPosition + (this.height - this.infoScreenHeight) / 2 - 5; // Shifted up a bit
+    this.infoScreenColor = "rgba(20, 40, 20, 0.9)";
+    this.infoScreenBorderColor = Palettes.ui.FRAME_LIGHT;
+
+    // III.1.A Text Appearing (Info Screen)
+    this.displayedText = "";
+    this.targetText = "";
+    this.typewriterIndex = 0;
+    this.typewriterFrameCounter = 0; // Used with Config.UI_TYPEWRITER_SPEED
+
+    // III.1.A UI Panel Entrance
+    this.panelYOffset = this.height; // Start off-screen
+    this.panelIntroSpeed = Config.UI_PANEL_INTRO_SPEED;
+
+    // F-Key Icon for prompt
+    this.fKeyIcon = this.createFKeyIcon();
+
     if (Config.DEBUG_MODE) console.log("UI initialized.");
   }
-  drawPixelBorder(ctx, x, y, width, height, color, thickness = 1) {
+
+  // I.1.C UI Elements: Frames
+  drawPixelArtFrame(ctx, x, y, width, height, themeColors = Palettes.ui) {
+    const outerDark = themeColors.FRAME_DARK || "#101010";
+    const midLight = themeColors.FRAME_LIGHT || "#404040";
+    const innerHighlight = themeColors.FRAME_HIGHLIGHT || "#606060";
+    const thickness = 2; // Each band thickness
+
+    // Outer border
+    drawPixelRect(ctx, x, y, width, height, outerDark);
+    // Mid border
+    drawPixelRect(
+      ctx,
+      x + thickness,
+      y + thickness,
+      width - thickness * 2,
+      height - thickness * 2,
+      midLight
+    );
+    // Inner highlight
+    drawPixelRect(
+      ctx,
+      x + thickness * 2,
+      y + thickness * 2,
+      width - thickness * 4,
+      height - thickness * 4,
+      innerHighlight
+    );
+    // Innermost fill (optional, if the frame itself is the background)
+    // drawPixelRect(ctx, x + thickness*3, y + thickness*3, width - thickness*6, height - thickness*6, themeColors.BACKGROUND || "#050505");
+  }
+
+  // Fallback if drawPixelArtFrame is too complex or for simpler borders
+  drawSimplePixelBorder(ctx, x, y, width, height, color, thickness = 1) {
     ctx.strokeStyle = color;
     ctx.lineWidth = thickness;
-    ctx.beginPath();
-    ctx.rect(
-      Math.floor(x) + 0.5,
-      Math.floor(y) + 0.5,
-      Math.floor(width) - 1,
-      Math.floor(height) - 1
-    );
-    ctx.stroke();
+    // Stroking on pixel boundaries needs 0.5 offset for crisp lines
+    for (let i = 0; i < thickness; i++) {
+      ctx.strokeRect(
+        Math.floor(x) + i + 0.5,
+        Math.floor(y) + i + 0.5,
+        Math.floor(width) - 1 - i * 2,
+        Math.floor(height) - 1 - i * 2
+      );
+    }
   }
+
+  // I.1.C Custom Pixel Font (Bitmap Font simulation)
+  drawPixelText(
+    ctx,
+    text,
+    startX,
+    startY,
+    color,
+    scale = 1,
+    customFontSettings = this.fontSettings
+  ) {
+    ctx.fillStyle = color;
+    let currentX = startX;
+    const charHeight = customFontSettings.charHeight * scale;
+
+    for (let char of text.toUpperCase()) {
+      // Assuming font data is uppercase
+      const charData = PixelFontData[char] || PixelFontData["?"]; // Fallback to '?'
+      const charWidth =
+        (charData[0] ? charData[0].length : PixelFontData.DEFAULT_CHAR_WIDTH) *
+        scale;
+
+      if (char === " ") {
+        currentX +=
+          PixelFontData.DEFAULT_CHAR_WIDTH * scale +
+          customFontSettings.charSpacing * scale;
+        continue;
+      }
+
+      for (let r = 0; r < charData.length; r++) {
+        for (let c = 0; c < charData[r].length; c++) {
+          if (charData[r][c] === 1) {
+            drawPixelRect(
+              ctx,
+              currentX + c * scale,
+              startY + r * scale,
+              scale,
+              scale,
+              color
+            );
+          }
+        }
+      }
+      currentX += charWidth + customFontSettings.charSpacing * scale;
+    }
+    return currentX; // Return end X for potential chaining
+  }
+
+  createFKeyIcon() {
+    // 8x8 pixel art F key
+    const size = 8 * this.fontSettings.scale; // Scale it like text
+    const canvas = document.createElement("canvas");
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext("2d");
+    ctx.imageSmoothingEnabled = false;
+
+    const s = this.fontSettings.scale; // shortcut for scale
+    drawPixelRect(ctx, 0, 0, 8 * s, 8 * s, Palettes.ui.BUTTON_F_KEY_BG); // Keycap bg
+    drawPixelRect(
+      ctx,
+      1 * s,
+      1 * s,
+      6 * s,
+      6 * s,
+      lightenDarkenColor(Palettes.ui.BUTTON_F_KEY_BG, 20)
+    ); // Inner highlight
+
+    // 'F' letter
+    const fData = PixelFontData["F"];
+    const charOffsetX = 2 * s;
+    const charOffsetY = 1 * s;
+    ctx.fillStyle = Palettes.ui.BUTTON_F_KEY_FG;
+    for (let r = 0; r < fData.length; r++) {
+      for (let c = 0; c < fData[r].length; c++) {
+        if (fData[r][c] === 1) {
+          drawPixelRect(
+            ctx,
+            charOffsetX + c * s,
+            charOffsetY + r * s,
+            s,
+            s,
+            Palettes.ui.BUTTON_F_KEY_FG
+          );
+        }
+      }
+    }
+    return canvas;
+  }
+
+  update(deltaTime) {
+    // UI Panel Entrance
+    if (this.panelYOffset > 0) {
+      this.panelYOffset -= this.panelIntroSpeed * (60 * deltaTime); // Make speed consistent
+      if (this.panelYOffset < 0) this.panelYOffset = 0;
+    }
+
+    // Text Appearing (Typewriter)
+    const currentZone = StopsManager.getCurrentZone(this.game.world.worldX);
+    let newTargetText = "Portfolio Drive"; // Default
+    let hasInteractivePrompt = false;
+
+    if (currentZone) {
+      if (
+        StopsManager.activeStop &&
+        Config.STOP_LINKS[StopsManager.activeStop.id]
+      ) {
+        // If near an interactive stop, prioritize its prompt
+        newTargetText = `${StopsManager.activeStop.promptText} - [F] to Enter`;
+        hasInteractivePrompt = true;
+      } else if (currentZone.promptText) {
+        newTargetText = currentZone.promptText;
+      }
+    }
+
+    if (this.targetText !== newTargetText) {
+      this.targetText = newTargetText;
+      this.displayedText = "";
+      this.typewriterIndex = 0;
+      this.typewriterFrameCounter = 0;
+    }
+
+    if (this.typewriterIndex < this.targetText.length) {
+      this.typewriterFrameCounter += 60 * deltaTime;
+      const charsToAdvance = Math.floor(
+        this.typewriterFrameCounter / Config.UI_TYPEWRITER_SPEED
+      );
+      if (charsToAdvance > 0) {
+        this.typewriterIndex += charsToAdvance;
+        this.typewriterFrameCounter %= Config.UI_TYPEWRITER_SPEED; // Keep remainder for next frame
+        this.displayedText = this.targetText.substring(0, this.typewriterIndex);
+      }
+    } else {
+      this.displayedText = this.targetText; // Ensure full text is shown once done
+    }
+  }
+
   render(ctx) {
+    const actualYPosition = this.yPosition + this.panelYOffset;
+
+    // Main UI Panel Background
     drawPixelRect(
       ctx,
       0,
-      this.yPosition,
+      actualYPosition,
       Config.CANVAS_WIDTH,
       this.height,
       this.backgroundColor
     );
-    this.drawPixelBorder(
+    // Main UI Panel Border (using new frame drawer)
+    this.drawPixelArtFrame(
       ctx,
       0,
-      this.yPosition,
+      actualYPosition,
       Config.CANVAS_WIDTH,
-      this.height,
-      this.borderColor,
-      2
+      this.height
+    );
+
+    // Info Screen Background & Border
+    this.drawPixelArtFrame(
+      ctx,
+      this.infoScreenX,
+      actualYPosition + (this.height - this.infoScreenHeight) / 2 - 5,
+      this.infoScreenWidth,
+      this.infoScreenHeight
     );
     drawPixelRect(
       ctx,
-      this.infoScreenX,
-      this.infoScreenY,
-      this.infoScreenWidth,
-      this.infoScreenHeight,
+      this.infoScreenX + 6,
+      actualYPosition + (this.height - this.infoScreenHeight) / 2 - 5 + 6,
+      this.infoScreenWidth - 12,
+      this.infoScreenHeight - 12,
       this.infoScreenColor
     );
-    this.drawPixelBorder(
-      ctx,
-      this.infoScreenX,
-      this.infoScreenY,
-      this.infoScreenWidth,
-      this.infoScreenHeight,
-      this.infoScreenBorderColor,
-      2
-    );
-    ctx.fillStyle = this.textColor;
-    ctx.font = this.font;
-    ctx.textAlign = "center";
 
-    const currentZone = StopsManager.getCurrentZone(this.game.world.worldX);
-    let displayText = "Portfolio Drive"; // Default text
-    let hasInteractivePrompt = false;
+    // Text Rendering (using pixel font)
+    const textY =
+      actualYPosition +
+      (this.height - this.infoScreenHeight) / 2 -
+      5 +
+      this.infoScreenHeight / 2 -
+      (this.fontSettings.charHeight * this.fontSettings.scale) / 2;
 
-    if (currentZone) {
-      if (currentZone.linkURL) {
-        displayText = `${currentZone.name}-Press F to enter`;
-        hasInteractivePrompt = true;
-      } else if (currentZone.name) {
-        // For zones without a direct link (e.g., "Desert Drive")
-        displayText = `${currentZone.name}`;
-      }
+    // Calculate text width for centering
+    let textToRender = this.displayedText;
+    let textWidth = 0;
+    for (let char of textToRender.toUpperCase()) {
+      const charData = PixelFontData[char] || PixelFontData["?"];
+      textWidth +=
+        (charData[0] ? charData[0].length : PixelFontData.DEFAULT_CHAR_WIDTH) *
+        this.fontSettings.scale;
+      textWidth += this.fontSettings.charSpacing * this.fontSettings.scale;
+    }
+    textWidth -= this.fontSettings.charSpacing * this.fontSettings.scale; // Remove last spacing
+
+    const textStartX =
+      this.infoScreenX + (this.infoScreenWidth - textWidth) / 2;
+
+    // III.1.B Interactive Prompt Animation
+    let hasInteractivePromptThisFrame = false;
+    if (
+      StopsManager.activeStop &&
+      Config.STOP_LINKS[StopsManager.activeStop.id]
+    ) {
+      hasInteractivePromptThisFrame = textToRender.includes("[F]");
     }
 
-    const textY = this.infoScreenY + this.infoScreenHeight / 2 + 6;
+    if (hasInteractivePromptThisFrame) {
+      const fKeyIndex = textToRender.indexOf("[F]");
+      const preText = textToRender.substring(0, fKeyIndex);
+      const postText = textToRender.substring(fKeyIndex + 3); // Length of "[F]"
 
-    // Blinking logic for interactive prompts
-    if (hasInteractivePrompt) {
-      // Blink the text
-      ctx.fillText(
-        displayText,
-        this.infoScreenX + this.infoScreenWidth / 2,
-        textY
+      let currentX = this.drawPixelText(
+        ctx,
+        preText,
+        textStartX,
+        textY,
+        this.textColor,
+        this.fontSettings.scale
+      );
+
+      // Draw F-Key Icon
+      const iconY =
+        textY -
+        (this.fKeyIcon.height -
+          this.fontSettings.charHeight * this.fontSettings.scale) /
+          2; // Align icon vertically
+      let iconPulseAlpha = 1.0;
+      if (Math.floor(this.game.gameTime * 4) % 2 === 0) {
+        // Blinking effect
+        // Pulsing size/alpha for the icon or key text
+        iconPulseAlpha =
+          0.7 + ((Math.sin(this.game.gameTime * 10) + 1) / 2) * 0.3; // 0.7 to 1.0
+      }
+      ctx.globalAlpha = iconPulseAlpha;
+      ctx.drawImage(this.fKeyIcon, currentX, iconY);
+      ctx.globalAlpha = 1.0;
+      currentX +=
+        this.fKeyIcon.width +
+        this.fontSettings.charSpacing * this.fontSettings.scale;
+
+      this.drawPixelText(
+        ctx,
+        postText,
+        currentX,
+        textY,
+        this.textColor,
+        this.fontSettings.scale
       );
     } else {
-      // Always display non-interactive text
-      ctx.fillText(
-        displayText,
-        this.infoScreenX + this.infoScreenWidth / 2,
-        textY
+      this.drawPixelText(
+        ctx,
+        textToRender,
+        textStartX,
+        textY,
+        this.textColor,
+        this.fontSettings.scale
       );
     }
 
-    ctx.strokeStyle = "rgba(50, 100, 50, 0.15)";
+    // Scanlines on info screen (subtle)
+    ctx.strokeStyle = "rgba(50, 100, 50, 0.1)";
     ctx.lineWidth = 1;
-    for (let i = 0; i < this.infoScreenHeight; i += 3) {
+    const infoScreenActualY =
+      actualYPosition + (this.height - this.infoScreenHeight) / 2 - 5;
+    for (
+      let i = 0;
+      i < this.infoScreenHeight;
+      i += 2 * this.fontSettings.scale
+    ) {
+      // Scale scanlines too
       ctx.beginPath();
-      ctx.moveTo(this.infoScreenX, this.infoScreenY + i + 0.5);
+      ctx.moveTo(this.infoScreenX, infoScreenActualY + i + 0.5);
       ctx.lineTo(
         this.infoScreenX + this.infoScreenWidth,
-        this.infoScreenY + i + 0.5
+        infoScreenActualY + i + 0.5
       );
       ctx.stroke();
     }
-    ctx.textAlign = "left";
-    this.drawStatusLights(ctx);
-    this.drawMiniMapPlaceholder(ctx);
+
+    this.drawStatusLights(ctx, actualYPosition);
+    this.drawMiniMap(ctx, actualYPosition); // Changed from Placeholder
   }
-  drawStatusLights(ctx) {
-    const lightSize = 8;
-    const padding = 10;
+
+  // I.1.C UI Icons: Status Lights
+  drawStatusLights(ctx, panelY) {
+    const lightSize = 8 * this.fontSettings.scale; // Scaled lights
+    const padding = 5 * this.fontSettings.scale;
     const startX = padding + 20;
-    const lightY = this.yPosition + (this.height - lightSize) / 2;
-    for (let i = 0; i < 3; i++) {
-      let lightColor = "#550000"; // Off
-      if (i === 0 && this.game.player.currentSpeed !== 0) {
-        lightColor = "#00AA00"; // Green for moving
-      } else if (i === 1 && StopsManager.activeStop) {
-        // Yellow if near a marker (StopsManager.activeStop is set when close to a marker)
-        lightColor = "#FFAA00";
-      } else if (i === 2 && this.game.frameCount % 60 < 30) {
-        lightColor = "#0055AA"; // Blue, blinking (system pulse or generic indicator)
+    const lightY = panelY + (this.height - lightSize) / 2;
+
+    const status = [
+      {
+        active: this.game.player.currentSpeed !== 0,
+        colorOn: "#00AA00",
+        colorOff: "#550000",
+        icon: "engine",
+      },
+      {
+        active: !!StopsManager.activeStop,
+        colorOn: "#FFAA00",
+        colorOff: "#553300",
+        icon: "signal",
+      },
+      {
+        active: this.game.player.headlightsOn,
+        colorOn: "#FFFF00",
+        colorOff: "#555500",
+        icon: "light",
+      },
+    ];
+
+    status.forEach((s, i) => {
+      let lightColor = s.active ? s.colorOn : s.colorOff;
+      if (s.active && (s.icon === "signal" || s.icon === "light")) {
+        // Blinking for active signal/light
+        if (Math.floor(this.game.gameTime * 3) % 2 === 0) {
+          lightColor = lightenDarkenColor(lightColor, -40);
+        }
       }
+
       drawPixelRect(
         ctx,
         startX + i * (lightSize + padding),
@@ -940,87 +2259,167 @@ class UI {
         lightSize,
         lightColor
       );
-      this.drawPixelBorder(
+      this.drawSimplePixelBorder(
         ctx,
         startX + i * (lightSize + padding),
         lightY,
         lightSize,
         lightSize,
         darkenColor(lightColor, 30),
-        1
+        this.fontSettings.scale > 1 ? 2 : 1
       );
-    }
-  }
-  drawMiniMapPlaceholder(ctx) {
-    const mapSize = this.height - 10;
-    const mapX = Config.CANVAS_WIDTH - mapSize - 25;
-    const mapY = this.yPosition + (this.height - mapSize) / 2;
-    drawPixelRect(ctx, mapX, mapY, mapSize, mapSize, this.infoScreenColor);
-    this.drawPixelBorder(
-      ctx,
-      mapX,
-      mapY,
-      mapSize,
-      mapSize,
-      this.infoScreenBorderColor,
-      2
-    );
-    drawPixelRect(
-      ctx,
-      mapX + mapSize / 2 - 2,
-      mapY + mapSize / 2 - 2,
-      4,
-      4,
-      this.textColor
-    );
-    StopsManager.stops.forEach((stop, index) => {
-      if (index < 3) {
-        // Limit to 3 dots for simplicity
-        const stopProgress =
-          (stop.worldPositionX - this.game.world.worldX) /
-          (StopsManager.stops[StopsManager.stops.length - 1].worldPositionX ||
-            1); // Avoid div by zero if only one stop
-        const stopDotX = mapX + 5 + index * (mapSize / 4);
-        // Adjust Y position calculation for minimap dots
-        let stopDotY = mapY + mapSize * 0.75 - stopProgress * mapSize * 0.5;
-        stopDotY = Math.max(mapY + 2, Math.min(mapY + mapSize - 5, stopDotY));
-
-        let stopColor = "#505050"; // Default inactive
-        if (StopsManager.activeStop && StopsManager.activeStop.id === stop.id) {
-          stopColor = Palettes.gaming.props[1]; // Yellow if marker is active
-        } else if (
-          this.game.world.worldX >
-          stop.worldPositionX - StopsManager.stopActivationRange / 2
-        ) {
-          // Check if player has passed the marker or is very close to it from the left
-          const currentZoneForMinimap = StopsManager.getCurrentZone(
-            this.game.world.worldX
-          );
-          if (
-            currentZoneForMinimap &&
-            currentZoneForMinimap.stopId === stop.id
-          ) {
-            // If currently in the zone associated with this stop
-            stopColor = Palettes.gaming.props[2]; // Green for current zone's marker
-          } else if (
-            this.game.world.worldX >
-            stop.worldPositionX + StopsManager.stopActivationRange / 2
-          ) {
-            stopColor = Palettes.gaming.props[0]; // Red if passed
-          }
-        }
-        drawPixelRect(
-          ctx,
-          Math.floor(stopDotX),
-          Math.floor(stopDotY),
-          3,
-          3,
-          stopColor
-        );
-      }
+      // Could draw tiny icons inside the lights here if desired
     });
   }
+
+  // I.1.C UI Icons: Minimap
+  // III.1.C Minimap Enhancements
+  drawMiniMap(ctx, panelY) {
+    const mapSize = this.height - 10 * this.fontSettings.scale;
+    const mapX = Config.CANVAS_WIDTH - mapSize - 15 * this.fontSettings.scale;
+    const mapY = panelY + (this.height - mapSize) / 2;
+
+    // Background and Border
+    this.drawPixelArtFrame(ctx, mapX - 3, mapY - 3, mapSize + 6, mapSize + 6); // Outer frame
+    drawPixelRect(ctx, mapX, mapY, mapSize, mapSize, this.infoScreenColor); // Inner BG
+
+    // Subtle Background Texture
+    const texColor = Palettes.ui.MINIMAP_TEXTURE;
+    for (let mx = 0; mx < mapSize; mx += 4 * this.fontSettings.scale) {
+      for (let my = 0; my < mapSize; my += 4 * this.fontSettings.scale) {
+        if (
+          (mx / (4 * this.fontSettings.scale) +
+            my / (4 * this.fontSettings.scale)) %
+            2 ===
+          0
+        ) {
+          drawPixelRect(
+            ctx,
+            mapX + mx,
+            mapY + my,
+            2 * this.fontSettings.scale,
+            2 * this.fontSettings.scale,
+            texColor
+          );
+        }
+      }
+    }
+
+    // Player Icon (small arrow or car shape)
+    const playerIconSize = 3 * this.fontSettings.scale;
+    const playerMapX = mapX + mapSize / 2 - playerIconSize / 2;
+    const playerMapY = mapY + mapSize * 0.8 - playerIconSize / 2; // Player at bottom 80% of map
+    drawPixelRect(
+      ctx,
+      playerMapX,
+      playerMapY,
+      playerIconSize,
+      playerIconSize,
+      Palettes.ui.MINIMAP_PLAYER
+    );
+    // Arrow shape for player
+    drawPixelRect(
+      ctx,
+      playerMapX + playerIconSize / 3,
+      playerMapY - playerIconSize / 3,
+      playerIconSize / 3,
+      playerIconSize / 3,
+      Palettes.ui.MINIMAP_PLAYER
+    );
+
+    // Stop Icons
+    const mapRangeWorldUnits = StopsManager.zoneEntryLeadDistance * 2.5; // How much world distance the map displays vertically
+    StopsManager.stops.forEach((stop) => {
+      const distanceToPlayer = stop.worldPositionX - this.game.world.worldX;
+      // Normalize distance to map's vertical range (0 at player, 1 at top of map range)
+      const normalizedDist = distanceToPlayer / mapRangeWorldUnits;
+
+      if (normalizedDist < 1 && normalizedDist > -0.2) {
+        // Only draw if within map's visual range + a bit below
+        const stopDotSize = 2 * this.fontSettings.scale;
+        // X position can be slightly varied based on stop index or type for less overlap
+        const stopDotX =
+          mapX +
+          mapSize / 2 -
+          stopDotSize / 2 +
+          (StopsManager.stops.indexOf(stop) - 1) * (stopDotSize * 2);
+        const stopDotY = playerMapY - normalizedDist * mapSize * 0.7; // Scale y based on normalized distance
+
+        if (stopDotY > mapY && stopDotY < mapY + mapSize - stopDotSize) {
+          // Cull to map bounds
+          let stopColor = Palettes.ui.MINIMAP_STOP_DEFAULT;
+          if (stop.theme === "gaming")
+            stopColor = Palettes.ui.MINIMAP_STOP_GAMING;
+          else if (stop.theme === "futuristic")
+            stopColor = Palettes.ui.MINIMAP_STOP_FUTURISTIC;
+          else if (stop.theme === "industrial")
+            stopColor = Palettes.ui.MINIMAP_STOP_INDUSTRIAL;
+
+          if (
+            StopsManager.activeStop &&
+            StopsManager.activeStop.id === stop.id
+          ) {
+            // Pulse active stop
+            const pulse = (Math.sin(this.game.gameTime * 8) + 1) / 2;
+            const s = stopDotSize + Math.floor(pulse * 2);
+            drawPixelRect(
+              ctx,
+              Math.floor(stopDotX - (s - stopDotSize) / 2),
+              Math.floor(stopDotY - (s - stopDotSize) / 2),
+              s,
+              s,
+              lightenDarkenColor(stopColor, 30)
+            );
+          } else {
+            drawPixelRect(
+              ctx,
+              Math.floor(stopDotX),
+              Math.floor(stopDotY),
+              stopDotSize,
+              stopDotSize,
+              stopColor
+            );
+          }
+        }
+      }
+    });
+
+    // Zone Boundaries (Simplified: show next zone boundary)
+    // This is complex to do accurately for all zones. Showing next one is a start.
+    let nextStopForBoundary = null;
+    for (const stop of StopsManager.stops) {
+      if (
+        stop.worldPositionX - StopsManager.zoneEntryLeadDistance >
+        this.game.world.worldX
+      ) {
+        nextStopForBoundary = stop;
+        break;
+      }
+    }
+    if (nextStopForBoundary) {
+      const boundaryWorldX =
+        nextStopForBoundary.worldPositionX - StopsManager.zoneEntryLeadDistance;
+      const distanceToBoundary = boundaryWorldX - this.game.world.worldX;
+      const normalizedBoundaryDist = distanceToBoundary / mapRangeWorldUnits;
+      if (normalizedBoundaryDist < 1 && normalizedBoundaryDist > 0) {
+        const boundaryY = playerMapY - normalizedBoundaryDist * mapSize * 0.7;
+        if (boundaryY > mapY && boundaryY < mapY + mapSize - 1) {
+          ctx.globalAlpha = 0.3;
+          drawPixelRect(
+            ctx,
+            mapX,
+            boundaryY,
+            mapSize,
+            1 * this.fontSettings.scale,
+            Palettes.ui.FRAME_HIGHLIGHT
+          );
+          ctx.globalAlpha = 1.0;
+        }
+      }
+    }
+  }
 }
+
 function darkenColor(hex, percent) {
   return lightenDarkenColor(hex, -Math.abs(percent));
 }
@@ -1035,8 +2434,8 @@ function drawPixelRect(ctx, x, y, width, height, color) {
   ctx.fillRect(
     Math.floor(x),
     Math.floor(y),
-    Math.floor(width),
-    Math.floor(height)
+    Math.max(1, Math.floor(width)), // Ensure width/height is at least 1
+    Math.max(1, Math.floor(height))
   );
 }
 
@@ -1056,12 +2455,26 @@ function getRandomInt(min, max) {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
-function getRandomColor(palette) {
-  if (!palette || palette.length === 0) return "#000000";
-  return palette[Math.floor(Math.random() * palette.length)];
+function getRandomFloat(min, max) {
+  return Math.random() * (max - min) + min;
+}
+
+function getRandomColor(paletteArray) {
+  if (
+    !paletteArray ||
+    !Array.isArray(paletteArray) ||
+    paletteArray.length === 0
+  ) {
+    return "#000000";
+  }
+  return paletteArray[Math.floor(Math.random() * paletteArray.length)];
 }
 
 function lightenDarkenColor(hex, percent) {
+  if (typeof hex !== "string") {
+    return "#000000";
+  }
+
   let usePound = false;
   if (hex.startsWith("#")) {
     hex = hex.slice(1);
@@ -1074,10 +2487,16 @@ function lightenDarkenColor(hex, percent) {
       .join("");
   }
   if (hex.length !== 6) {
+    if (hex.toLowerCase().startsWith("rgba"))
+      return (usePound ? "#" : "") + hex;
     return (usePound ? "#" : "") + "000000";
   }
 
   const num = parseInt(hex, 16);
+  if (isNaN(num)) {
+    return (usePound ? "#" : "") + "000000";
+  }
+
   let r = (num >> 16) + percent;
   r = Math.max(0, Math.min(255, r));
 
@@ -1094,52 +2513,168 @@ function lightenDarkenColor(hex, percent) {
   return (usePound ? "#" : "") + R + G + B;
 }
 
+function desaturateColor(hex, amount) {
+  if (typeof hex !== "string") {
+    return "#000000";
+  }
+
+  let usePound = false;
+  const originalHexInputForWarning = hex;
+
+  if (hex.startsWith("#")) {
+    hex = hex.slice(1);
+    usePound = true;
+  }
+  if (hex.length === 3) {
+    hex = hex
+      .split("")
+      .map((char) => char + char)
+      .join("");
+  }
+  if (hex.length !== 6) {
+    if (hex.toLowerCase().startsWith("rgba"))
+      return (usePound ? "#" : "") + hex;
+    return (usePound ? "#" : "") + "000000";
+  }
+
+  const num = parseInt(hex, 16);
+  if (isNaN(num)) {
+    return (usePound ? "#" : "") + "000000";
+  }
+  let r = num >> 16;
+  let g = (num >> 8) & 0x00ff;
+  let b = num & 0x0000ff;
+
+  const gray = Math.round(0.299 * r + 0.587 * g + 0.114 * b);
+  r = Math.round(r + (gray - r) * amount);
+  g = Math.round(g + (gray - g) * amount);
+  b = Math.round(b + (gray - b) * amount);
+
+  r = Math.max(0, Math.min(255, r));
+  g = Math.max(0, Math.min(255, g));
+  b = Math.max(0, Math.min(255, b));
+
+  const R = r.toString(16).padStart(2, "0");
+  const G = g.toString(16).padStart(2, "0");
+  const B = b.toString(16).padStart(2, "0");
+
+  return (usePound ? "#" : "") + R + G + B;
+}
+
 const Palettes = {
-  desert: ["#D2B48C", "#C19A6B", "#A0522D", "#8B4513", "#F0E68C"],
+  vehicle: {
+    CAR_BODY_MAIN: "#C0392B",
+    CAR_BODY_ACCENT: "#E74C3C",
+    CAR_WINDOW: "#7FB3D5",
+    CAR_TIRE_DARK: "#2C3E50",
+    CAR_TIRE_LIGHT: "#34495E",
+    CAR_UNDERCARRIAGE: "#566573",
+    CAR_ROOF: "#A93226",
+    CAR_HEADLIGHT_ON: "#FFFFE0",
+    CAR_HEADLIGHT_OFF: "#B0B0B0",
+    CAR_TAILLIGHT_ON: "#FF0000",
+    CAR_TAILLIGHT_BRAKE: "#FF4500",
+    CAR_TAILLIGHT_OFF: "#8B0000",
+    DUST_COLOR: ["#A0522D", "#8B4513", "#D2B48C"],
+    EXHAUST_SMOKE: ["#555555", "#666666", "#777777"],
+  },
+  desert: {
+    sky: ["#FAD7A0", "#F5B041", "#E6E6FA"], // Lightened Zenith
+    ground: ["#D2B48C", "#C19A6B", "#A0522D" /*detail*/, "#8B4513" /*shadow*/],
+    objects_primary: { base: "#B08D57", light: "#C8A165", shadow: "#967142" },
+    objects_accent: ["#8B4513", "#F0E68C"],
+    emissive: ["#FFBF00"],
+    atmosphere: {
+      hazeColor: "rgba(245, 176, 65, 0.08)",
+      fogColor: "rgba(210, 180, 140, 0.03)",
+    }, // Subtler
+    generic_dust: ["#A0522D", "#8B4513", "#D2B48C"],
+  },
   gaming: {
-    terrain: ["#34A245", "#2A8C39", "#83E270"],
     sky: ["#5C94FC", "#3060E1"],
-    structures: ["#808080", "#A0A0A0", "#606060"],
-    props: ["#FF0000", "#FFFF00", "#00FF00", "#FF00FF"],
+    ground: ["#34A245", "#2A8C39", "#83E270" /*detail*/, "#1F682A" /*shadow*/],
+    objects_primary: { base: "#808080", light: "#A0A0A0", shadow: "#606060" },
+    objects_accent: ["#FF00FF", "#00FF00"],
+    emissive: ["#FFFF00", "#00FFFF", "#FF69B4"],
+    props: ["#FF0000", "#FFFF00", "#00FF00", "#FF00FF"], // Ensured this is present
+    atmosphere: {
+      hazeColor: "rgba(48, 96, 225, 0.05)",
+      fogColor: "rgba(0,0,0,0.0)",
+    },
   },
   futuristic: {
-    buildings: ["#A0A0C0", "#B0B0D0", "#707090", "#303050"],
-    lights: ["#00FFFF", "#FF00FF", "#FFFF00", "#7FFF00"],
-    accents: ["#E0E0FF", "#C0C0FF"],
-    sky: ["#202040", "#303050"],
+    sky: ["#101020", "#202040", "#080810"],
+    ground: [
+      "#303038",
+      "#282830",
+      "#404050" /*lines/detail*/,
+      "#181820" /*shadow*/,
+    ],
+    objects_primary: { base: "#A0A0C0", light: "#C0C0E0", shadow: "#707090" },
+    objects_accent: ["#E0E0FF", "#00A0A0"],
+    emissive: ["#00FFFF", "#FF00FF", "#FFFF00", "#7FFF00"],
+    atmosphere: {
+      hazeColor: "rgba(32, 32, 64, 0.12)",
+      fogColor: "rgba(16, 16, 32, 0.15)",
+    }, // Subtler
   },
   industrial: {
-    buildings: ["#606060", "#707070", "#505050", "#404040"],
-    metal: ["#888888", "#999999", "#A0A0A0"],
-    rust: ["#B7410E", "#A0522D"],
+    sky: ["#778899", "#808080", "#607080"],
+    ground: ["#606060", "#707070", "#505050" /*detail*/, "#404040" /*shadow*/],
+    objects_primary: { base: "#6E6E6E", light: "#8C8C8C", shadow: "#545454" },
+    objects_accent: ["#B7410E", "#A0522D"],
+    emissive: ["#FFA500", "#FFD700"],
+    atmosphere: {
+      hazeColor: "rgba(100, 100, 100, 0.15)",
+      fogColor: "rgba(80, 80, 80, 0.25)",
+    }, // Subtler
     smoke: ["#A9A9A9", "#C0C0C0", "#D3D3D3"],
-    sky: ["#778899", "#808080"],
+  },
+  ui: {
+    FRAME_DARK: "#202020",
+    FRAME_LIGHT: "#505050",
+    FRAME_HIGHLIGHT: "#707070",
+    BUTTON_F_KEY_BG: "#4A4A4A",
+    BUTTON_F_KEY_FG: "#E0E0E0",
+    MINIMAP_PLAYER: "#00FF00",
+    MINIMAP_STOP_DEFAULT: "#FFFF00",
+    MINIMAP_STOP_GAMING: "#FF00FF",
+    MINIMAP_STOP_FUTURISTIC: "#00FFFF",
+    MINIMAP_STOP_INDUSTRIAL: "#FFA500",
+    MINIMAP_TEXTURE: "rgba(0,0,0,0.2)",
   },
 };
 
 function interpolateColor(hex1, hex2, factor) {
+  if (typeof hex1 !== "string" || typeof hex2 !== "string") {
+    return typeof hex2 === "string"
+      ? hex2
+      : typeof hex1 === "string"
+      ? hex1
+      : "#000000";
+  }
   factor = Math.max(0, Math.min(1, factor));
 
-  const parseHexComponent = (hexComp) => {
-    if (hexComp.length === 3)
-      hexComp = hexComp
+  const parseHexComponent = (hexStr) => {
+    let h = hexStr.startsWith("#") ? hexStr.slice(1) : hexStr;
+    if (h.length === 3)
+      h = h
         .split("")
         .map((c) => c + c)
         .join("");
-    if (hexComp.length !== 6) return [0, 0, 0];
-    return [
-      parseInt(hexComp.substring(0, 2), 16),
-      parseInt(hexComp.substring(2, 4), 16),
-      parseInt(hexComp.substring(4, 6), 16),
-    ];
+    if (h.length !== 6) {
+      return [0, 0, 0];
+    }
+    const r = parseInt(h.substring(0, 2), 16);
+    const g = parseInt(h.substring(2, 4), 16);
+    const b = parseInt(h.substring(4, 6), 16);
+    if (isNaN(r) || isNaN(g) || isNaN(b)) return [0, 0, 0]; // Check for NaN after parsing
+    return [r, g, b];
   };
 
-  const h1 = hex1.startsWith("#") ? hex1.slice(1) : hex1;
-  const h2 = hex2.startsWith("#") ? hex2.slice(1) : hex2;
-
   try {
-    const [r1, g1, b1] = parseHexComponent(h1);
-    const [r2, g2, b2] = parseHexComponent(h2);
+    const [r1, g1, b1] = parseHexComponent(hex1);
+    const [r2, g2, b2] = parseHexComponent(hex2);
 
     const r = Math.round(r1 + (r2 - r1) * factor);
     const g = Math.round(g1 + (g2 - g1) * factor);
@@ -1152,19 +2687,318 @@ function interpolateColor(hex1, hex2, factor) {
 
     return `#${componentToHex(r)}${componentToHex(g)}${componentToHex(b)}`;
   } catch (e) {
-    console.error(
-      "Error in interpolateColor:",
-      e.message,
-      "Inputs:",
-      hex1,
-      hex2,
-      factor,
-      "Defaulting to hex2:",
-      hex2
-    );
-    return hex2.startsWith("#") ? hex2 : "#" + hex2;
+    return typeof hex2 === "string" && hex2.startsWith("#")
+      ? hex2
+      : typeof hex2 === "string"
+      ? "#" + hex2
+      : "#000000";
   }
 }
+
+const PixelFontData = {
+  A: [
+    [0, 1, 1, 0],
+    [1, 0, 0, 1],
+    [1, 1, 1, 1],
+    [1, 0, 0, 1],
+    [1, 0, 0, 1],
+  ],
+  B: [
+    [1, 1, 1, 0],
+    [1, 0, 0, 1],
+    [1, 1, 1, 0],
+    [1, 0, 0, 1],
+    [1, 1, 1, 0],
+  ],
+  C: [
+    [0, 1, 1, 1],
+    [1, 0, 0, 0],
+    [1, 0, 0, 0],
+    [1, 0, 0, 0],
+    [0, 1, 1, 1],
+  ],
+  D: [
+    [1, 1, 1, 0],
+    [1, 0, 0, 1],
+    [1, 0, 0, 1],
+    [1, 0, 0, 1],
+    [1, 1, 1, 0],
+  ],
+  E: [
+    [1, 1, 1, 1],
+    [1, 0, 0, 0],
+    [1, 1, 1, 0],
+    [1, 0, 0, 0],
+    [1, 1, 1, 1],
+  ],
+  F: [
+    [1, 1, 1, 1],
+    [1, 0, 0, 0],
+    [1, 1, 1, 0],
+    [1, 0, 0, 0],
+    [1, 0, 0, 0],
+  ],
+  G: [
+    [0, 1, 1, 1],
+    [1, 0, 0, 0],
+    [1, 0, 1, 1],
+    [1, 0, 0, 1],
+    [0, 1, 1, 1],
+  ],
+  H: [
+    [1, 0, 0, 1],
+    [1, 0, 0, 1],
+    [1, 1, 1, 1],
+    [1, 0, 0, 1],
+    [1, 0, 0, 1],
+  ],
+  I: [
+    [1, 1, 1],
+    [0, 1, 0],
+    [0, 1, 0],
+    [0, 1, 0],
+    [1, 1, 1],
+  ],
+  J: [
+    [0, 0, 1, 1],
+    [0, 0, 0, 1],
+    [0, 0, 0, 1],
+    [1, 0, 0, 1],
+    [0, 1, 1, 0],
+  ],
+  K: [
+    [1, 0, 0, 1],
+    [1, 0, 1, 0],
+    [1, 1, 0, 0],
+    [1, 0, 1, 0],
+    [1, 0, 0, 1],
+  ],
+  L: [
+    [1, 0, 0, 0],
+    [1, 0, 0, 0],
+    [1, 0, 0, 0],
+    [1, 0, 0, 0],
+    [1, 1, 1, 1],
+  ],
+  M: [
+    [1, 0, 0, 0, 1],
+    [1, 1, 0, 1, 1],
+    [1, 0, 1, 0, 1],
+    [1, 0, 0, 0, 1],
+    [1, 0, 0, 0, 1],
+  ],
+  N: [
+    [1, 0, 0, 1],
+    [1, 1, 0, 1],
+    [1, 0, 1, 1],
+    [1, 0, 0, 1],
+    [1, 0, 0, 1],
+  ],
+  O: [
+    [0, 1, 1, 0],
+    [1, 0, 0, 1],
+    [1, 0, 0, 1],
+    [1, 0, 0, 1],
+    [0, 1, 1, 0],
+  ],
+  P: [
+    [1, 1, 1, 0],
+    [1, 0, 0, 1],
+    [1, 1, 1, 0],
+    [1, 0, 0, 0],
+    [1, 0, 0, 0],
+  ],
+  Q: [
+    [0, 1, 1, 0],
+    [1, 0, 0, 1],
+    [1, 0, 0, 1],
+    [1, 0, 1, 1],
+    [0, 1, 1, 1],
+  ],
+  R: [
+    [1, 1, 1, 0],
+    [1, 0, 0, 1],
+    [1, 1, 1, 0],
+    [1, 0, 1, 0],
+    [1, 0, 0, 1],
+  ],
+  S: [
+    [0, 1, 1, 1],
+    [1, 0, 0, 0],
+    [0, 1, 1, 0],
+    [0, 0, 0, 1],
+    [1, 1, 1, 0],
+  ],
+  T: [
+    [1, 1, 1, 1, 1],
+    [0, 0, 1, 0, 0],
+    [0, 0, 1, 0, 0],
+    [0, 0, 1, 0, 0],
+    [0, 0, 1, 0, 0],
+  ],
+  U: [
+    [1, 0, 0, 1],
+    [1, 0, 0, 1],
+    [1, 0, 0, 1],
+    [1, 0, 0, 1],
+    [0, 1, 1, 0],
+  ],
+  V: [
+    [1, 0, 0, 0, 1],
+    [1, 0, 0, 0, 1],
+    [0, 1, 0, 1, 0],
+    [0, 1, 0, 1, 0],
+    [0, 0, 1, 0, 0],
+  ],
+  W: [
+    [1, 0, 0, 0, 1],
+    [1, 0, 0, 0, 1],
+    [1, 0, 1, 0, 1],
+    [1, 1, 0, 1, 1],
+    [1, 0, 0, 0, 1],
+  ],
+  X: [
+    [1, 0, 0, 1],
+    [0, 1, 1, 0],
+    [0, 0, 1, 0],
+    [0, 1, 1, 0],
+    [1, 0, 0, 1],
+  ],
+  Y: [
+    [1, 0, 1],
+    [1, 0, 1],
+    [0, 1, 0],
+    [0, 1, 0],
+    [0, 1, 0],
+  ],
+  Z: [
+    [1, 1, 1, 1],
+    [0, 0, 1, 0],
+    [0, 1, 0, 0],
+    [1, 0, 0, 0],
+    [1, 1, 1, 1],
+  ],
+  0: [
+    [0, 1, 1, 0],
+    [1, 0, 0, 1],
+    [1, 0, 1, 1],
+    [1, 1, 0, 1],
+    [0, 1, 1, 0],
+  ],
+  1: [
+    [0, 1, 0],
+    [1, 1, 0],
+    [0, 1, 0],
+    [0, 1, 0],
+    [1, 1, 1],
+  ],
+  2: [
+    [0, 1, 1, 0],
+    [1, 0, 0, 1],
+    [0, 0, 1, 0],
+    [0, 1, 0, 0],
+    [1, 1, 1, 1],
+  ],
+  3: [
+    [1, 1, 1, 0],
+    [0, 0, 0, 1],
+    [0, 1, 1, 0],
+    [0, 0, 0, 1],
+    [1, 1, 1, 0],
+  ],
+  4: [
+    [0, 0, 1, 0],
+    [0, 1, 1, 0],
+    [1, 0, 1, 0],
+    [1, 1, 1, 1],
+    [0, 0, 1, 0],
+  ],
+  5: [
+    [1, 1, 1, 1],
+    [1, 0, 0, 0],
+    [1, 1, 1, 0],
+    [0, 0, 0, 1],
+    [1, 1, 1, 0],
+  ],
+  6: [
+    [0, 1, 1, 0],
+    [1, 0, 0, 0],
+    [1, 1, 1, 0],
+    [1, 0, 0, 1],
+    [0, 1, 1, 0],
+  ],
+  7: [
+    [1, 1, 1, 1],
+    [0, 0, 0, 1],
+    [0, 0, 1, 0],
+    [0, 1, 0, 0],
+    [0, 1, 0, 0],
+  ],
+  8: [
+    [0, 1, 1, 0],
+    [1, 0, 0, 1],
+    [0, 1, 1, 0],
+    [1, 0, 0, 1],
+    [0, 1, 1, 0],
+  ],
+  9: [
+    [0, 1, 1, 0],
+    [1, 0, 0, 1],
+    [0, 1, 1, 1],
+    [0, 0, 0, 1],
+    [0, 1, 1, 0],
+  ],
+  " ": [
+    [0, 0, 0],
+    [0, 0, 0],
+    [0, 0, 0],
+    [0, 0, 0],
+    [0, 0, 0],
+  ],
+  ".": [[0], [0], [0], [0], [1]],
+  ",": [
+    [0, 0],
+    [0, 0],
+    [0, 0],
+    [1, 0],
+    [0, 1],
+  ],
+  "!": [[1], [1], [1], [0], [1]],
+  "?": [
+    [0, 1, 1, 0],
+    [1, 0, 0, 1],
+    [0, 0, 1, 0],
+    [0, 0, 0, 0],
+    [0, 0, 1, 0],
+  ],
+  "-": [
+    [0, 0, 0, 0],
+    [0, 0, 0, 0],
+    [1, 1, 1, 1],
+    [0, 0, 0, 0],
+    [0, 0, 0, 0],
+  ],
+  ":": [[0], [1], [0], [1], [0]],
+  "[": [
+    [1, 1, 0],
+    [1, 0, 0],
+    [1, 0, 0],
+    [1, 0, 0],
+    [1, 1, 0],
+  ],
+  "]": [
+    [0, 1, 1],
+    [0, 0, 1],
+    [0, 0, 1],
+    [0, 0, 1],
+    [0, 1, 1],
+  ],
+  DEFAULT_CHAR_WIDTH: 4,
+  DEFAULT_CHAR_HEIGHT: 5,
+};
+PixelFontData.charHeight = 5;
+PixelFontData.charSpacing = 1;
+PixelFontData.lineHeight = 7;
 
 
 ---
@@ -1173,22 +3007,20 @@ function interpolateColor(hex1, hex2, factor) {
 class ParallaxLayer {
   constructor(
     scrollSpeedFactor,
-    color,
     elementGenerator,
     elementCount,
     game,
     world,
-    layerType,
+    layerConfig,
     isSourceLayer = false,
     initialXOffset = 0
   ) {
     this.scrollSpeedFactor = scrollSpeedFactor;
-    this.color = color;
     this.elementGenerator = elementGenerator;
     this.elementCount = elementCount;
     this.game = game;
     this.world = world;
-    this.layerType = layerType;
+    this.layerConfig = layerConfig;
     this.isSourceLayer = isSourceLayer;
     this.initialXOffset = initialXOffset;
     this.elements = [];
@@ -1197,12 +3029,38 @@ class ParallaxLayer {
 
   generateInitialElements() {
     this.elements = [];
-    const virtualWidth = Config.CANVAS_WIDTH * 2.5;
+    const virtualWidth = Config.CANVAS_WIDTH * (this.isSourceLayer ? 2.5 : 3.5);
     for (let i = 0; i < this.elementCount; i++) {
       const x = this.initialXOffset + Math.random() * virtualWidth;
-      const y = Math.random() * Config.CANVAS_HEIGHT;
+      let y;
+      if (
+        this.layerConfig.type &&
+        (this.layerConfig.type.includes("sky") ||
+          this.layerConfig.type.includes("celestial") ||
+          this.layerConfig.type.includes("stars") ||
+          this.layerConfig.type.includes("nebulae"))
+      ) {
+        y = getRandomFloat(
+          Config.CANVAS_HEIGHT * 0.05,
+          this.world.groundLevelY * 0.55
+        ); // Adjusted Y for sky elements
+      } else if (this.layerConfig.type === "foreground_debris") {
+        y = getRandomFloat(
+          this.world.groundLevelY + 5,
+          Config.CANVAS_HEIGHT - 5
+        ); // Ensure fully in foreground
+      } else if (
+        this.layerConfig.type &&
+        (this.layerConfig.type.includes("mountain") ||
+          this.layerConfig.type.includes("distant"))
+      ) {
+        // For distant ground-based elements, y is often calculated relative to groundLevelY in the generator itself
+        y = this.world.groundLevelY; // Placeholder, generator will refine
+      } else {
+        y = Math.random() * Config.CANVAS_HEIGHT;
+      }
       this.elements.push(
-        this.elementGenerator(x, y, this.color, this.game, this.world)
+        this.elementGenerator(x, y, this.layerConfig, this.game, this.world)
       );
     }
   }
@@ -1210,32 +3068,70 @@ class ParallaxLayer {
   update(worldScrollSpeed) {
     this.elements.forEach((element) => {
       element.x -= worldScrollSpeed * this.scrollSpeedFactor;
+      if (element.update) {
+        element.update(this.game.deltaTime, this.game.gameTime);
+      }
     });
+
+    const screenWidth = Config.CANVAS_WIDTH;
+    const wrapBuffer = screenWidth * 0.75;
+    const totalVirtualWidth = screenWidth * (this.isSourceLayer ? 2.5 : 3.5);
 
     if (this.isSourceLayer) {
       this.elements = this.elements.filter((element) => {
         const elementVisualWidth =
           element.width || (element.radius ? element.radius * 2 : 50);
-        return element.x + elementVisualWidth > -100; // Increased buffer for removal
+        return element.x + elementVisualWidth > -wrapBuffer * 2;
       });
     } else {
-      const screenWidth = Config.CANVAS_WIDTH;
-      const wrapBuffer = screenWidth * 0.5;
-      const totalVirtualWidth = screenWidth * 2.5;
-
       this.elements.forEach((element) => {
         const elementVisualWidth =
           element.width || (element.radius ? element.radius * 2 : 50);
-
         if (worldScrollSpeed > 0) {
           if (element.x + elementVisualWidth < -wrapBuffer) {
-            element.x += totalVirtualWidth;
-            element.x += Math.random() * 50 - 25;
+            element.x += totalVirtualWidth + Math.random() * 100 - 50;
+            if (element.canRandomizeYOnWrap) {
+              if (
+                this.layerConfig.type &&
+                (this.layerConfig.type.includes("sky") ||
+                  this.layerConfig.type.includes("celestial") ||
+                  this.layerConfig.type.includes("stars") ||
+                  this.layerConfig.type.includes("nebulae"))
+              ) {
+                element.y = getRandomFloat(
+                  Config.CANVAS_HEIGHT * 0.05,
+                  this.world.groundLevelY * 0.55
+                );
+              } else if (this.layerConfig.type === "foreground_debris") {
+                element.y = getRandomFloat(
+                  this.world.groundLevelY + 5,
+                  Config.CANVAS_HEIGHT - 5
+                );
+              }
+            }
           }
         } else if (worldScrollSpeed < 0) {
           if (element.x > screenWidth + wrapBuffer) {
-            element.x -= totalVirtualWidth;
-            element.x += Math.random() * 50 - 25;
+            element.x -= totalVirtualWidth + Math.random() * 100 - 50;
+            if (element.canRandomizeYOnWrap) {
+              if (
+                this.layerConfig.type &&
+                (this.layerConfig.type.includes("sky") ||
+                  this.layerConfig.type.includes("celestial") ||
+                  this.layerConfig.type.includes("stars") ||
+                  this.layerConfig.type.includes("nebulae"))
+              ) {
+                element.y = getRandomFloat(
+                  Config.CANVAS_HEIGHT * 0.05,
+                  this.world.groundLevelY * 0.55
+                );
+              } else if (this.layerConfig.type === "foreground_debris") {
+                element.y = getRandomFloat(
+                  this.world.groundLevelY + 5,
+                  Config.CANVAS_HEIGHT - 5
+                );
+              }
+            }
           }
         }
       });
@@ -1243,7 +3139,7 @@ class ParallaxLayer {
   }
 
   render(ctx) {
-    const renderBuffer = 100;
+    const renderBuffer = 200;
     this.elements.forEach((element) => {
       const elementVisualWidth =
         element.width || (element.radius ? element.radius * 2 : 50);
@@ -1251,7 +3147,73 @@ class ParallaxLayer {
         element.x + elementVisualWidth > -renderBuffer &&
         element.x < Config.CANVAS_WIDTH + renderBuffer
       ) {
-        this.world.drawElement(ctx, element);
+        let elementAlpha = 1.0;
+        if (this.world.isTransitioning) {
+          if (this.isSourceLayer) {
+            elementAlpha = 1.0 - this.world.transitionProgress;
+          } else {
+            if (
+              this.world.targetLayers &&
+              this.world.targetLayers.includes(this)
+            ) {
+              elementAlpha = this.world.transitionProgress;
+            } else if (
+              this.world.sourceLayers &&
+              !this.world.sourceLayers.includes(this)
+            ) {
+              elementAlpha = 1.0;
+            } else if (!this.world.sourceLayers) {
+              elementAlpha = 1.0;
+            } else {
+              elementAlpha = 0;
+            }
+          }
+        }
+        elementAlpha = Math.max(0, Math.min(1, elementAlpha));
+        const originalCtxAlpha = ctx.globalAlpha;
+        ctx.globalAlpha *= elementAlpha;
+
+        const activeTheme = this.world.isTransitioning
+          ? this.world.transitionTargetTheme
+          : this.world.currentTheme;
+        const themePalette = Palettes[activeTheme] || Palettes.desert;
+
+        let finalColor = element.originalColor || element.color;
+
+        if (this.scrollSpeedFactor < 0.8 && !element.isEmissive) {
+          const tintFactor = Math.min(0.6, (1 - this.scrollSpeedFactor) * 0.7);
+          const skyHorizonColor =
+            (themePalette.sky && themePalette.sky[1]) ||
+            this.world.currentHorizonSky ||
+            "#ABCDEF";
+
+          if (finalColor && typeof finalColor === "string") {
+            finalColor = interpolateColor(
+              finalColor,
+              skyHorizonColor,
+              tintFactor
+            );
+            if (this.scrollSpeedFactor < 0.3) {
+              finalColor = desaturateColor(finalColor, tintFactor * 0.5);
+            }
+          } else if (typeof finalColor !== "string") {
+            finalColor = "#FF00FF";
+          }
+          element.tempColor = finalColor;
+        } else {
+          element.tempColor = finalColor;
+        }
+
+        if (ctx.globalAlpha > 0.01) {
+          this.world.drawElement(
+            ctx,
+            element,
+            this.game.gameTime,
+            this.scrollSpeedFactor
+          );
+        }
+
+        ctx.globalAlpha = originalCtxAlpha;
       }
     });
   }
@@ -1262,415 +3224,1118 @@ class World {
     this.game = game;
     this.layers = [];
     this.worldX = 0;
-    this.groundLevelY = Config.CANVAS_HEIGHT - 70;
+    this.groundLevelY = Config.CANVAS_HEIGHT - 80;
+
     this.currentTheme = "desert_start";
-    this.skyColor = Palettes.desert[4];
+    const initialPalette = Palettes[this.currentTheme] || Palettes.desert;
+    this.skyColor = (initialPalette.sky && initialPalette.sky[0]) || "#FAD7A0";
+    this.currentTopSky = this.skyColor;
+    this.currentHorizonSky =
+      (initialPalette.sky && initialPalette.sky[1]) ||
+      lightenDarkenColor(this.currentTopSky, 30);
+
     this.isTransitioning = false;
     this.transitionProgress = 0;
-    this.transitionDurationWorldUnits = Config.CANVAS_WIDTH * 1.0; // Duration of sky change etc.
+    this.transitionDurationWorldUnits = Config.CANVAS_WIDTH * 1.1;
+
     this.transitionSourceSky = this.skyColor;
     this.transitionTargetSky = this.skyColor;
     this.transitionSourceTheme = this.currentTheme;
     this.transitionTargetTheme = this.currentTheme;
+
     this.sourceLayers = null;
     this.targetLayers = null;
-    // this.bufferDistance = Config.CANVAS_WIDTH * 0.5; // Not directly used here anymore
+
     this.layers = this.initLayers(this.currentTheme);
+
+    this.weatherParticles = [];
+    this.maxWeatherParticles = 100;
+
     if (Config.DEBUG_MODE) console.log("World initialized.");
   }
 
   static layerConfigs = {
     desert_start: [
-      { type: "distant", speed: 0.05, count: 10 },
-      { type: "distant", speed: 0.15, count: 15 },
-      { type: "mid", speed: 0.4, count: 20 },
-      { type: "ground", speed: 1.0, count: 6 },
+      {
+        type: "stars_far",
+        speed: 0.01,
+        count: 150,
+        generator: World.generateStar,
+        options: { colors: ["#FFFFFF", "#FFFFE0"], sizes: [1, 1] },
+      },
+      {
+        type: "stars_near",
+        speed: 0.02,
+        count: 70,
+        generator: World.generateStar,
+        options: { colors: ["#FFFFFF", "#F0F8FF"], sizes: [1, 2] },
+      },
+      {
+        type: "celestial",
+        speed: 0.03,
+        count: 1,
+        generator: World.generateCelestialBody,
+        options: { type: "sun" },
+      },
+      {
+        type: "distant_mountains",
+        speed: 0.08,
+        count: 10,
+        generator: World.generateDesertDistant,
+        options: {
+          colorBase: Palettes.desert.objects_primary.shadow,
+          heightRange: [80, 150],
+        },
+      },
+      {
+        type: "mid_mesas",
+        speed: 0.25,
+        count: 15,
+        generator: World.generateDesertMid,
+        options: { type: "mesa" },
+      },
+      {
+        type: "near_rocks_cactus",
+        speed: 0.5,
+        count: 20,
+        generator: World.generateDesertMid,
+        options: { type: "mixed" },
+      },
+      {
+        type: "ground_texture",
+        speed: 1.0,
+        count: 8,
+        generator: World.generateDesertGround,
+      },
+      {
+        type: "foreground_debris",
+        speed: 1.5,
+        count: 30,
+        generator: World.generateForegroundDebris,
+        options: { types: ["rock", "tumbleweed_small"] },
+      },
     ],
     gaming: [
-      { type: "sky", speed: 0.08, count: 15 },
-      { type: "distant", speed: 0.25, count: 12 },
-      { type: "mid", speed: 0.6, count: 25 },
-      { type: "ground", speed: 1.0, count: 6 },
+      {
+        type: "stars_far",
+        speed: 0.02,
+        count: 100,
+        generator: World.generateStar,
+        options: { colors: ["#FF00FF", "#00FFFF"], sizes: [1, 1] },
+      },
+      {
+        type: "celestial",
+        speed: 0.04,
+        count: 1,
+        generator: World.generateCelestialBody,
+        options: { type: "glitch_moon" },
+      },
+      {
+        type: "pixel_clouds",
+        speed: 0.1,
+        count: 15,
+        generator: World.generatePixelCloud,
+        options: {
+          colors: [
+            Palettes.gaming.sky[1],
+            lightenDarkenColor(Palettes.gaming.sky[1], 20),
+          ],
+          sizeRange: [30, 80],
+        },
+      },
+      {
+        type: "distant_structures",
+        speed: 0.25,
+        count: 12,
+        generator: World.generateGamingDistant,
+      },
+      {
+        type: "mid_elements",
+        speed: 0.6,
+        count: 25,
+        generator: World.generateGamingMid,
+      },
+      {
+        type: "ground_texture",
+        speed: 1.0,
+        count: 8,
+        generator: World.generateGamingGround,
+      },
+      {
+        type: "foreground_debris",
+        speed: 1.5,
+        count: 25,
+        generator: World.generateForegroundDebris,
+        options: { types: ["glitch_cube", "wire", "pixel_coin"] },
+      },
     ],
     futuristic: [
-      { type: "sky", speed: 0.06, count: 20 },
-      { type: "distant", speed: 0.15, count: 15 },
-      { type: "mid", speed: 0.5, count: 20 },
-      { type: "ground", speed: 1.0, count: 6 },
+      {
+        type: "stars_far",
+        speed: 0.01,
+        count: 200,
+        generator: World.generateStar,
+        options: { colors: ["#A0A0FF", "#C0C0FF"], sizes: [1, 1] },
+      },
+      {
+        type: "stars_near",
+        speed: 0.02,
+        count: 100,
+        generator: World.generateStar,
+        options: { colors: ["#FFFFFF", "#E0E0FF"], sizes: [1, 2] },
+      },
+      {
+        type: "nebulae_distant",
+        speed: 0.03,
+        count: 5,
+        generator: World.generateNebula,
+        options: {
+          colors: [
+            Palettes.futuristic.sky[2] + "33",
+            Palettes.futuristic.emissive[1] + "22",
+          ],
+        },
+      },
+      {
+        type: "celestial",
+        speed: 0.04,
+        count: 1,
+        generator: World.generateCelestialBody,
+        options: { type: "tech_moon" },
+      },
+      {
+        type: "sky_traffic",
+        speed: 0.15,
+        count: 20,
+        generator: World.generateFuturisticSkyElement,
+      },
+      {
+        type: "distant_towers",
+        speed: 0.3,
+        count: 15,
+        generator: World.generateFuturisticDistant,
+      },
+      {
+        type: "mid_platforms",
+        speed: 0.55,
+        count: 20,
+        generator: World.generateFuturisticMid,
+      },
+      {
+        type: "ground_guideways",
+        speed: 1.0,
+        count: 8,
+        generator: World.generateFuturisticGround,
+      },
+      {
+        type: "foreground_debris",
+        speed: 1.5,
+        count: 20,
+        generator: World.generateForegroundDebris,
+        options: { types: ["metal_shard", "glowing_bit", "circuit_piece"] },
+      },
     ],
     industrial: [
-      { type: "sky", speed: 0.1, count: 15 },
-      { type: "distant", speed: 0.25, count: 12 },
-      { type: "mid", speed: 0.6, count: 20 },
-      { type: "ground", speed: 1.0, count: 6 },
+      {
+        type: "dense_clouds_low",
+        speed: 0.08,
+        count: 10,
+        generator: World.generatePixelCloud,
+        options: {
+          colors: [Palettes.industrial.smoke[0], Palettes.industrial.sky[2]],
+          sizeRange: [80, 150],
+          yPosRange: [0.3, 0.6],
+        },
+      },
+      {
+        type: "dense_clouds_high",
+        speed: 0.12,
+        count: 12,
+        generator: World.generatePixelCloud,
+        options: {
+          colors: [Palettes.industrial.smoke[1], Palettes.industrial.smoke[2]],
+          sizeRange: [60, 120],
+          yPosRange: [0.1, 0.4],
+        },
+      },
+      {
+        type: "distant_smokestacks",
+        speed: 0.25,
+        count: 12,
+        generator: World.generateIndustrialDistant,
+        options: { type: "smokestack" },
+      },
+      {
+        type: "mid_buildings_pipes",
+        speed: 0.6,
+        count: 20,
+        generator: World.generateIndustrialMid,
+      },
+      {
+        type: "ground_asphalt_cracks",
+        speed: 1.0,
+        count: 8,
+        generator: World.generateIndustrialGround,
+      },
+      {
+        type: "foreground_debris",
+        speed: 1.5,
+        count: 35,
+        generator: World.generateForegroundDebris,
+        options: { types: ["rubble", "rusty_pipe_fragment", "gear"] },
+      },
     ],
   };
 
-  static layerGenerators = {
-    desert_start: {
-      distant: World.generateDesertDistant,
-      mid: World.generateDesertMid,
-      ground: World.generateDesertGround,
-    },
-    gaming: {
-      sky: World.generateGamingSkyElement,
-      distant: World.generateGamingDistant,
-      mid: World.generateGamingMid,
-      ground: World.generateGamingGround,
-    },
-    futuristic: {
-      sky: World.generateFuturisticSkyElement,
-      distant: World.generateFuturisticDistant,
-      mid: World.generateFuturisticMid,
-      ground: World.generateFuturisticGround,
-    },
-    industrial: {
-      sky: World.generateIndustrialSkyElement,
-      distant: World.generateIndustrialDistant,
-      mid: World.generateIndustrialMid,
-      ground: World.generateIndustrialGround,
-    },
-  };
-
-  static generateDesertDistant(x, y, baseColor, game, world) {
-    const width = getRandomInt(20, 40);
-    const height = getRandomInt(50, 100);
-    return {
-      type: "rect",
-      x: x,
-      y: world.groundLevelY - height - getRandomInt(20, 50),
-      width: width,
-      height: height,
-      color: getRandomColor(Palettes.desert.slice(1, 3)),
-    };
-  }
-
-  static generateDesertMid(x, y, baseColor, game, world) {
-    const r = Math.random();
-    if (r < 0.6) {
-      const cactusHeight = getRandomInt(20, 50);
-      return {
-        type: "cactus",
-        x: x,
-        y: world.groundLevelY - cactusHeight,
-        width: getRandomInt(6, 12),
-        height: cactusHeight,
-        color: Palettes.desert[1],
-      };
-    } else {
-      const size = getRandomInt(10, 25);
-      return {
-        type: "rect",
-        x: x,
-        y: world.groundLevelY - size,
-        width: size * (1 + Math.random() * 0.5),
-        height: size,
-        color: Palettes.desert[2],
-      };
+  static getSideColor(objectPalette, sideType) {
+    if (!objectPalette || typeof objectPalette !== "object") {
+      return "#FF00FF";
+    }
+    switch (sideType) {
+      case "light":
+        return objectPalette.light || objectPalette.base || "#FFFFFF";
+      case "shadow":
+        return objectPalette.shadow || objectPalette.base || "#000000";
+      case "base":
+      default:
+        return objectPalette.base || "#808080";
     }
   }
 
-  static generateDesertGround(x, y, baseColor, game, world) {
+  static generateStar(x, y, layerConfig, game, world) {
+    const options = layerConfig.options || {};
+    const sizeArray = options.sizes || [1, 1];
+    const size = getRandomInt(sizeArray[0], sizeArray[1]);
+    const colorArray = options.colors || ["#FFFFFF"];
+    const starColor = getRandomColor(colorArray);
     return {
-      type: "rect",
+      type: "star",
       x: x,
-      y: world.groundLevelY,
-      width: Config.CANVAS_WIDTH * 0.5 + getRandomInt(0, 10),
-      height: 70,
-      color: Palettes.desert[0],
+      y: y,
+      size: size,
+      color: starColor,
+      initialBrightness: getRandomFloat(0.5, 1.0),
+      blinkRate: getRandomFloat(1, 5),
+      blinkPhase: getRandomFloat(0, Math.PI * 2),
+      originalColor: starColor,
+      canRandomizeYOnWrap: true,
     };
   }
 
-  static generateGamingSkyElement(x, y, baseColor, game, world) {
-    const cloudWidth = getRandomInt(30, 70);
-    const cloudHeight = getRandomInt(15, 30);
+  static generateCelestialBody(x, y, layerConfig, game, world) {
+    const options = layerConfig.options || {};
+    const type = options.type || "sun";
+    let radius, color, glowColor;
+
+    switch (type) {
+      case "moon":
+        radius = getRandomInt(25, 40);
+        color = "#E0E0E0";
+        glowColor = "#F0F0F0"; // Slightly brighter glow
+        break;
+      case "tech_moon":
+        radius = getRandomInt(30, 45);
+        color = Palettes.futuristic.objects_primary.base;
+        glowColor = Palettes.futuristic.emissive[0] + "AA"; // Semi-transparent glow
+        break;
+      case "glitch_moon":
+        radius = getRandomInt(20, 35);
+        color = Palettes.gaming.objects_accent[0];
+        glowColor = Palettes.gaming.emissive[1] + "88"; // Semi-transparent glow
+        break;
+      case "sun":
+      default:
+        radius = getRandomInt(30, 50);
+        color = Palettes.desert.emissive[0];
+        glowColor = lightenDarkenColor(Palettes.desert.emissive[0], 50) + "CC"; // Stronger, semi-transparent glow
+        break;
+    }
+    return {
+      type: "celestial_body",
+      x: x,
+      y: y,
+      radius: radius,
+      color: color,
+      glowColor: glowColor,
+      celestialType: type,
+      originalColor: color,
+      isEmissive: true,
+      canRandomizeYOnWrap: false,
+    };
+  }
+
+  static generatePixelCloud(x, y, layerConfig, game, world) {
+    const options = layerConfig.options || {};
+    const sizeRange = options.sizeRange || [20, 50];
+    const cloudWidth = getRandomInt(sizeRange[0], sizeRange[1]);
+    const cloudHeight = getRandomInt(sizeRange[0] * 0.4, sizeRange[1] * 0.7);
+    const yPosRange = options.yPosRange || [0.05, 0.4];
+    const cloudColors = options.colors || ["#FFFFFF", "#DDDDFF"];
+
     return {
       type: "pixelCloud",
       x: x,
-      y: getRandomInt(20, Config.CANVAS_HEIGHT * 0.3),
+      y: getRandomFloat(
+        Config.CANVAS_HEIGHT * yPosRange[0],
+        world.groundLevelY * yPosRange[1]
+      ),
       width: cloudWidth,
       height: cloudHeight,
-      color: "#FFFFFF",
-      blockColor: "#D0D0F0",
+      colors: cloudColors,
+      originalColor: cloudColors[0],
+      canRandomizeYOnWrap: true,
     };
   }
 
-  static generateGamingDistant(x, y, baseColor, game, world) {
-    const width = getRandomInt(40, 80);
-    const height = getRandomInt(60, 120);
+  static generateNebula(x, y, layerConfig, game, world) {
+    const options = layerConfig.options || {};
+    const nebulaColors = options.colors || [
+      Palettes.futuristic.sky[2] + "33",
+      Palettes.futuristic.emissive[1] + "22",
+    ];
     return {
-      type: "pixelStructure",
+      type: "nebula",
       x: x,
-      y: world.groundLevelY - height - getRandomInt(10, 30),
+      y: y,
+      width: getRandomInt(200, 400),
+      height: getRandomInt(100, 250),
+      colors: nebulaColors,
+      density: getRandomFloat(0.1, 0.3),
+      originalColor: nebulaColors[0],
+      isEmissive: true,
+      canRandomizeYOnWrap: true,
+    };
+  }
+
+  static generateDesertDistant(x, y, layerConfig, game, world) {
+    const options = layerConfig.options || {};
+    const heightRange = options.heightRange || [50, 100];
+    const width = getRandomInt(30, 70);
+    const height = getRandomInt(heightRange[0], heightRange[1]);
+    const color = options.colorBase || Palettes.desert.objects_primary.shadow;
+    return {
+      type: "rect_simple_mountain",
+      x: x,
+      y: world.groundLevelY - height - getRandomInt(10, 40),
       width: width,
       height: height,
-      colors: Palettes.gaming.structures,
-      density: 0.7,
+      color: color,
+      originalColor: color,
+      canRandomizeYOnWrap: false,
     };
   }
 
-  static generateGamingMid(x, y, baseColor, game, world) {
-    if (Math.random() < 0.5) {
-      const trunkHeight = getRandomInt(10, 20);
-      const leavesHeight = getRandomInt(20, 35);
-      const leavesWidth = getRandomInt(15, 30);
-      return {
+  static generateDesertMid(x, y, layerConfig, game, world) {
+    const options = layerConfig.options || {};
+    const r = Math.random();
+    let element;
+
+    if (options.type === "mesa" || (options.type === "mixed" && r < 0.4)) {
+      const mesaWidth = getRandomInt(60, 150);
+      const mesaHeight = getRandomInt(30, 80);
+      element = {
+        type: "mesa",
+        x: x,
+        y: world.groundLevelY - mesaHeight - getRandomInt(0, 20),
+        width: mesaWidth,
+        height: mesaHeight,
+        colors: Palettes.desert.objects_primary,
+        originalColor: Palettes.desert.objects_primary.base,
+      };
+    } else if (options.type === "mixed" && r < 0.8) {
+      const cactusHeight = getRandomInt(20, 60);
+      element = {
+        type: "cactus",
+        x: x,
+        y: world.groundLevelY - cactusHeight,
+        width: getRandomInt(6, 14),
+        height: cactusHeight,
+        color: Palettes.desert.objects_primary.base,
+        originalColor: Palettes.desert.objects_primary.base,
+      };
+    } else {
+      const rockSize = getRandomInt(15, 35);
+      element = {
+        type: "rock_pile",
+        x: x,
+        y: world.groundLevelY - rockSize,
+        size: rockSize,
+        colors: [
+          Palettes.desert.objects_primary.base,
+          Palettes.desert.objects_primary.shadow,
+        ],
+        originalColor: Palettes.desert.objects_primary.base,
+      };
+    }
+    element.canRandomizeYOnWrap = false;
+    return element;
+  }
+
+  static generateDesertGround(x, y, layerConfig, game, world) {
+    const baseColor = Palettes.desert.ground[0];
+    const detailColors = [Palettes.desert.ground[2], Palettes.desert.ground[3]];
+    const segmentWidth = Config.CANVAS_WIDTH * 0.5 + getRandomInt(0, 20);
+    return {
+      type: "textured_ground_rect",
+      x: x,
+      y: world.groundLevelY,
+      width: segmentWidth,
+      height: Config.CANVAS_HEIGHT - world.groundLevelY,
+      baseColor: baseColor,
+      detailColors: detailColors,
+      textureType: "desert_cracks_pebbles",
+      originalColor: baseColor,
+      canRandomizeYOnWrap: false,
+    };
+  }
+
+  static generateForegroundDebris(x, y, layerConfig, game, world) {
+    const options = layerConfig.options || { types: ["rock"] };
+    const type = getRandomColor(options.types);
+    let element = {
+      type: "debris",
+      x: x,
+      y: y,
+      size: getRandomInt(3, 8),
+      color: "#000000",
+      debrisType: type,
+      originalColor: "#000000",
+      canRandomizeYOnWrap: true,
+    };
+
+    switch (type) {
+      case "rock":
+        element.color = getRandomColor([
+          Palettes.desert.ground[2],
+          Palettes.desert.ground[3],
+        ]);
+        break;
+      case "tumbleweed_small":
+        element.color = Palettes.desert.objects_accent[0];
+        element.size = getRandomInt(8, 15);
+        break;
+      case "glitch_cube":
+        element.color = getRandomColor(Palettes.gaming.emissive);
+        element.isEmissive = true;
+        break;
+      case "wire":
+        element.color = Palettes.gaming.objects_primary.shadow;
+        element.size = getRandomInt(10, 20);
+        element.height = getRandomInt(1, 2);
+        break;
+      case "pixel_coin": // New debris for gaming
+        element.color = Palettes.gaming.emissive[0]; // Yellow
+        element.size = getRandomInt(5, 8);
+        element.isEmissive = true;
+        break;
+      case "metal_shard":
+        element.color = Palettes.futuristic.objects_primary.base;
+        break;
+      case "glowing_bit":
+        element.color = getRandomColor(Palettes.futuristic.emissive);
+        element.isEmissive = true;
+        break;
+      case "circuit_piece": // New debris for futuristic
+        element.color = Palettes.futuristic.objects_accent[1]; // Teal
+        element.size = getRandomInt(6, 12);
+        element.height = getRandomInt(2, 4);
+        break;
+      case "rubble":
+        element.color = getRandomColor(Palettes.industrial.ground.slice(1, 3));
+        break;
+      case "rusty_pipe_fragment":
+        element.color = getRandomColor(Palettes.industrial.objects_accent);
+        element.size = getRandomInt(10, 18);
+        element.height = getRandomInt(3, 5);
+        break;
+      case "gear": // New debris for industrial
+        element.color = Palettes.industrial.objects_primary.shadow;
+        element.size = getRandomInt(7, 10);
+        break;
+    }
+    element.originalColor = element.color;
+    return element;
+  }
+
+  static generateGamingDistant(x, y, layerConfig, game, world) {
+    const r = Math.random();
+    let element;
+    if (r < 0.5) {
+      const width = getRandomInt(30, 60);
+      const height = getRandomInt(80, Config.CANVAS_HEIGHT * 0.5);
+      element = {
+        type: "pixelStructure",
+        x: x,
+        y: world.groundLevelY - height - getRandomInt(10, 30),
+        width: width,
+        height: height,
+        colors: Palettes.gaming.objects_primary,
+        density: 0.6,
+        originalColor: Palettes.gaming.objects_primary.base,
+      };
+    } else if (r < 0.8) {
+      // Floating island type
+      const width = getRandomInt(50, 100);
+      const height = getRandomInt(20, 40);
+      element = {
+        type: "rect_floating_island",
+        x: x,
+        y: world.groundLevelY - height - getRandomInt(50, 150),
+        width: width,
+        height: height,
+        colors: {
+          top: Palettes.gaming.ground[2],
+          bottom: Palettes.gaming.ground[3],
+        },
+        originalColor: Palettes.gaming.ground[2],
+      };
+    } else {
+      // Distant arcade machine silhouette
+      const width = getRandomInt(20, 30);
+      const height = getRandomInt(40, 60);
+      element = {
+        type: "rect", // Simple rect for silhouette
+        x: x,
+        y: world.groundLevelY - height - getRandomInt(20, 50),
+        width: width,
+        height: height,
+        color: Palettes.gaming.objects_primary.shadow,
+        originalColor: Palettes.gaming.objects_primary.shadow,
+      };
+    }
+    element.canRandomizeYOnWrap = false;
+    return element;
+  }
+
+  static generateGamingMid(x, y, layerConfig, game, world) {
+    const r = Math.random();
+    let element;
+    if (r < 0.4) {
+      const trunkHeight = getRandomInt(10, 25);
+      const leavesHeight = getRandomInt(20, 40);
+      const leavesWidth = getRandomInt(15, 35);
+      element = {
         type: "pixelTree",
         x: x,
         y: world.groundLevelY - trunkHeight - leavesHeight,
-        trunkWidth: getRandomInt(4, 7),
+        trunkWidth: getRandomInt(4, 8),
         trunkHeight: trunkHeight,
-        trunkColor: "#704214",
-        leavesWidth: leavesWidth,
-        leavesHeight: leavesHeight,
-        leavesColor: Palettes.gaming.terrain[0],
+        trunkColor: Palettes.desert.objects_accent[0],
+        leavesColor: Palettes.gaming.ground[0],
+        leavesHighlight: Palettes.gaming.ground[2],
+        originalColor: Palettes.gaming.ground[0],
+      };
+    } else if (r < 0.7) {
+      const stemHeight = getRandomInt(15, 30);
+      const capRadius = getRandomInt(10, 25);
+      element = {
+        type: "giant_mushroom",
+        x: x,
+        y: world.groundLevelY - stemHeight - capRadius,
+        stemHeight: stemHeight,
+        stemWidth: getRandomInt(5, 10),
+        capRadius: capRadius,
+        colors: {
+          stem: Palettes.gaming.objects_primary.light,
+          capTop: getRandomColor(Palettes.gaming.props),
+          capSpots: getRandomColor(Palettes.gaming.emissive),
+        },
+        originalColor: getRandomColor(Palettes.gaming.props),
       };
     } else {
       const size = getRandomInt(10, 20);
-      return {
-        type: "rect",
+      element = {
+        type: "power_up_box",
         x: x,
-        y: world.groundLevelY - size - getRandomInt(5, 40),
-        width: size,
-        height: size,
-        color: getRandomColor(Palettes.gaming.props),
+        y: world.groundLevelY - size - getRandomInt(0, 10),
+        size: size,
+        colors: {
+          box: getRandomColor(Palettes.gaming.objects_accent),
+          symbol: Palettes.gaming.emissive[0],
+        },
+        originalColor: getRandomColor(Palettes.gaming.objects_accent),
+        isEmissive: true,
       };
     }
+    element.canRandomizeYOnWrap = false;
+    return element;
   }
 
-  static generateGamingGround(x, y, baseColor, game, world) {
+  static generateGamingGround(x, y, layerConfig, game, world) {
     const segmentWidth = 40;
-    let scrollFactor = 1.0;
-    const activeLayers = world.isTransitioning
-      ? world.targetLayers
-      : world.layers;
-    if (activeLayers && activeLayers.length > 0) {
-      const groundLayer = activeLayers.find(
-        (l) =>
-          l.layerType === "ground" &&
-          l.elementGenerator === World.generateGamingGround
-      );
-      if (groundLayer) scrollFactor = groundLayer.scrollSpeedFactor;
-    }
-
+    const scrollFactor = layerConfig.speed || 1.0;
+    const colorIndex =
+      Math.floor((x + world.worldX * scrollFactor) / segmentWidth) % 2;
+    const baseColor = Palettes.gaming.ground[colorIndex];
+    const detailColors = [
+      Palettes.gaming.ground[2],
+      Palettes.gaming.ground[3],
+      Palettes.gaming.emissive[2],
+    ]; // Added emissive for some details
     return {
-      type: "rect",
+      type: "textured_ground_rect",
       x: x,
       y: world.groundLevelY,
       width: Config.CANVAS_WIDTH * 0.5 + getRandomInt(0, 10),
-      height: 70,
-      color:
-        Math.floor((x + world.worldX * scrollFactor) / segmentWidth) % 2 === 0
-          ? Palettes.gaming.terrain[0]
-          : Palettes.gaming.terrain[1],
+      height: Config.CANVAS_HEIGHT - world.groundLevelY,
+      baseColor: baseColor,
+      detailColors: detailColors,
+      textureType: "gaming_grid_flowers",
+      originalColor: baseColor,
+      canRandomizeYOnWrap: false,
     };
   }
 
-  static generateFuturisticSkyElement(x, y, baseColor, game, world) {
-    if (Math.random() < 0.7) {
-      const size = getRandomInt(10, 40);
+  static generateFuturisticSkyElement(x, y, layerConfig, game, world) {
+    const r = Math.random();
+    if (r < 0.7) {
+      // Flying drone/vehicle silhouette
+      const width = getRandomInt(15, 40);
+      const height = getRandomInt(5, 10);
+      const color = Palettes.futuristic.objects_primary.shadow + "AA"; // Semi-transparent silhouette
       return {
         type: "rect",
-        x: x,
-        y: getRandomInt(20, Config.CANVAS_HEIGHT * 0.4),
-        width: size,
-        height: size / getRandomInt(2, 4),
-        color: getRandomColor(
-          Palettes.futuristic.accents.map((c) => lightenDarkenColor(c, -100))
+        x,
+        y: getRandomFloat(
+          Config.CANVAS_HEIGHT * 0.1,
+          Config.CANVAS_HEIGHT * 0.4
         ),
+        width,
+        height,
+        color,
+        originalColor: color,
+        canRandomizeYOnWrap: true,
       };
     } else {
-      const length = getRandomInt(50, 150);
+      // Energy beam/trail
+      const width = getRandomInt(50, 150);
+      const height = getRandomInt(1, 3);
+      const color = getRandomColor(Palettes.futuristic.emissive) + "66";
       return {
         type: "rect",
-        x: x,
-        y: getRandomInt(Config.CANVAS_HEIGHT * 0.1, Config.CANVAS_HEIGHT * 0.5),
-        width: length,
-        height: 1,
-        color: getRandomColor(Palettes.futuristic.lights.map((c) => `${c}33`)),
+        x,
+        y: getRandomFloat(
+          Config.CANVAS_HEIGHT * 0.1,
+          Config.CANVAS_HEIGHT * 0.5
+        ),
+        width,
+        height,
+        color,
+        originalColor: color,
+        isEmissive: true,
+        canRandomizeYOnWrap: true,
       };
     }
   }
-
-  static generateFuturisticDistant(x, y, baseColor, game, world) {
-    const buildingWidth = getRandomInt(30, 70);
-    const buildingHeight = getRandomInt(
-      100,
-      Math.floor(Config.CANVAS_HEIGHT * 0.6)
-    );
+  static generateFuturisticDistant(x, y, layerConfig, game, world) {
+    const buildingWidth = getRandomInt(40, 90);
+    const buildingHeight = getRandomInt(150, Config.CANVAS_HEIGHT * 0.7);
     return {
       type: "futuristicTower",
       x: x,
       y: world.groundLevelY - buildingHeight,
       width: buildingWidth,
       height: buildingHeight,
-      colors: Palettes.futuristic.buildings,
-      lightColors: Palettes.futuristic.lights,
+      colors: Palettes.futuristic.objects_primary,
+      lightColors: Palettes.futuristic.emissive,
+      originalColor: Palettes.futuristic.objects_primary.base,
+      canRandomizeYOnWrap: false,
     };
   }
-
-  static generateFuturisticMid(x, y, baseColor, game, world) {
-    if (Math.random() < 0.6) {
-      const platWidth = getRandomInt(40, 100);
-      const platHeight = getRandomInt(10, 30);
+  static generateFuturisticMid(x, y, layerConfig, game, world) {
+    const r = Math.random();
+    if (r < 0.6) {
+      // Floating platform
+      const platWidth = getRandomInt(50, 120);
+      const platHeight = getRandomInt(10, 25);
       return {
-        type: "rect",
+        type: "rect_platform",
         x: x,
-        y: world.groundLevelY - platHeight - getRandomInt(0, 50),
+        y: world.groundLevelY - platHeight - getRandomInt(10, 80),
         width: platWidth,
         height: platHeight,
-        color: getRandomColor(Palettes.futuristic.buildings.slice(0, 2)),
+        colors: {
+          base: Palettes.futuristic.objects_primary.base,
+          trim: Palettes.futuristic.emissive[0],
+        },
+        originalColor: Palettes.futuristic.objects_primary.base,
+        canRandomizeYOnWrap: false,
       };
     } else {
-      const orbRadius = getRandomInt(5, 15);
+      // Energy conduit/pylon
+      const pylonHeight = getRandomInt(30, 70);
+      const pylonWidth = getRandomInt(5, 10);
       return {
-        type: "glowingOrb",
+        type: "energy_pylon",
         x: x,
-        y: world.groundLevelY - orbRadius - getRandomInt(20, 70),
-        radius: orbRadius,
-        color: getRandomColor(Palettes.futuristic.lights),
+        y: world.groundLevelY - pylonHeight,
+        width: pylonWidth,
+        height: pylonHeight,
+        colors: {
+          structure: Palettes.futuristic.objects_primary.shadow,
+          emissive_core: getRandomColor(Palettes.futuristic.emissive),
+        },
+        originalColor: Palettes.futuristic.objects_primary.shadow,
+        isEmissive: true, // Part of it is
+        canRandomizeYOnWrap: false,
       };
     }
   }
-
-  static generateFuturisticGround(x, y, baseColor, game, world) {
-    const panelWidth = 60;
-    let scrollFactor = 1.0;
-    const activeLayers = world.isTransitioning
-      ? world.targetLayers
-      : world.layers;
-    if (activeLayers && activeLayers.length > 0) {
-      const groundLayer = activeLayers.find(
-        (l) =>
-          l.layerType === "ground" &&
-          l.elementGenerator === World.generateFuturisticGround
-      );
-      if (groundLayer) scrollFactor = groundLayer.scrollSpeedFactor;
-    }
+  static generateFuturisticGround(x, y, layerConfig, game, world) {
+    const panelWidth = 80;
+    const scrollFactor = layerConfig.speed || 1.0;
+    const colorIndex =
+      Math.floor((x + world.worldX * scrollFactor) / panelWidth) % 3;
+    const baseColor =
+      Palettes.futuristic.ground[
+        colorIndex === 0 ? 0 : colorIndex === 1 ? 1 : 0
+      ];
+    const detailColors = [
+      Palettes.futuristic.ground[2],
+      Palettes.futuristic.emissive[0],
+      Palettes.futuristic.emissive[1],
+    ];
     return {
-      type: "rect",
+      type: "textured_ground_rect",
       x: x,
       y: world.groundLevelY,
       width: Config.CANVAS_WIDTH * 0.5 + getRandomInt(0, 10),
-      height: 70,
-      color:
-        Math.floor((x + world.worldX * scrollFactor) / panelWidth) % 3 === 0
-          ? Palettes.futuristic.buildings[3]
-          : Palettes.futuristic.buildings[2],
+      height: Config.CANVAS_HEIGHT - world.groundLevelY,
+      baseColor: baseColor,
+      detailColors: detailColors,
+      textureType: "futuristic_guideways",
+      originalColor: baseColor,
+      canRandomizeYOnWrap: false,
     };
   }
 
-  static generateIndustrialSkyElement(x, y, baseColor, game, world) {
-    if (Math.random() < 0.5) {
-      const stackWidth = getRandomInt(8, 20);
-      const stackHeight = getRandomInt(
-        50,
-        Math.floor(Config.CANVAS_HEIGHT * 0.5)
-      );
-      return {
-        type: "rect",
-        x: x,
-        y: world.groundLevelY - stackHeight - getRandomInt(50, 100),
-        width: stackWidth,
-        height: stackHeight,
-        color: Palettes.industrial.buildings[3],
-      };
-    } else {
-      const cloudWidth = getRandomInt(50, 150);
-      const cloudHeight = getRandomInt(20, 40);
-      return {
-        type: "pixelCloud",
-        x: x,
-        y: getRandomInt(
-          Math.floor(Config.CANVAS_HEIGHT * 0.1),
-          Math.floor(Config.CANVAS_HEIGHT * 0.3)
-        ),
-        width: cloudWidth,
-        height: cloudHeight,
-        color: Palettes.industrial.smoke[0],
-        blockColor: Palettes.industrial.smoke[1],
-      };
-    }
-  }
-
-  static generateIndustrialDistant(x, y, baseColor, game, world) {
-    const buildingWidth = getRandomInt(60, 120);
-    const buildingHeight = getRandomInt(
-      80,
-      Math.floor(Config.CANVAS_HEIGHT * 0.4)
-    );
+  static generateIndustrialDistant(x, y, layerConfig, game, world) {
+    const options = layerConfig.options || {};
+    const buildingWidth = getRandomInt(70, 150);
+    const buildingHeight = getRandomInt(100, Config.CANVAS_HEIGHT * 0.5);
     return {
-      type: "industrialBuilding",
+      type:
+        options.type === "smokestack"
+          ? "industrialSmokestack"
+          : "industrialBuilding",
       x: x,
       y: world.groundLevelY - buildingHeight,
       width: buildingWidth,
       height: buildingHeight,
-      colors: Palettes.industrial.buildings,
-      accentColors: Palettes.industrial.metal,
+      colors: Palettes.industrial.objects_primary,
+      accentColors: Palettes.industrial.objects_accent,
+      smokeColors: Palettes.industrial.smoke,
+      originalColor: Palettes.industrial.objects_primary.base,
+      canRandomizeYOnWrap: false,
     };
   }
+  static generateIndustrialMid(x, y, layerConfig, game, world) {
+    const r = Math.random();
+    let element;
+    let originalCrateColor = getRandomColor(Palettes.industrial.objects_accent);
+    let originalPipeColor = Palettes.industrial.objects_primary.shadow;
 
-  static generateIndustrialMid(x, y, baseColor, game, world) {
-    if (Math.random() < 0.4) {
-      const crateSize = getRandomInt(15, 30);
-      return {
-        type: "rect",
-        x: x,
-        y: world.groundLevelY - crateSize,
-        width: crateSize,
-        height: crateSize,
-        color: getRandomColor(Palettes.desert.slice(1, 3)),
+    if (r < 0.4) {
+      const size = getRandomInt(15, 30);
+      element = {
+        type: "rect_crates",
+        x,
+        y: world.groundLevelY - size,
+        width: size,
+        height: size,
+        color: originalCrateColor,
+        originalColor: originalCrateColor,
+      };
+    } else if (r < 0.7) {
+      // Pipes
+      const length = getRandomInt(40, 100);
+      const thickness = getRandomInt(8, 15);
+      element = {
+        type: "rect_pipes",
+        x,
+        y: world.groundLevelY - thickness - getRandomInt(0, 40),
+        width: length,
+        height: thickness,
+        color: originalPipeColor,
+        originalColor: originalPipeColor,
       };
     } else {
-      const pipeLength = getRandomInt(30, 80);
-      const pipeThickness = getRandomInt(5, 10);
-      return {
-        type: "rect",
+      // Piles of rubble/scrap
+      const pileSize = getRandomInt(20, 40);
+      element = {
+        type: "rubble_pile",
         x: x,
-        y: world.groundLevelY - pipeThickness - getRandomInt(0, 30),
-        width: pipeLength,
-        height: pipeThickness,
-        color: getRandomColor(Palettes.industrial.metal),
+        y: world.groundLevelY - pileSize * 0.7, // Sit slightly lower
+        size: pileSize,
+        colors: [
+          Palettes.industrial.ground[1],
+          Palettes.industrial.objects_primary.shadow,
+          Palettes.industrial.objects_accent[0],
+        ],
+        originalColor: Palettes.industrial.ground[1],
       };
     }
+    element.canRandomizeYOnWrap = false;
+    return element;
   }
-
-  static generateIndustrialGround(x, y, baseColor, game, world) {
-    let color;
+  static generateIndustrialGround(x, y, layerConfig, game, world) {
     const r = Math.random();
-    if (r < 0.6) color = Palettes.industrial.metal[0];
-    else if (r < 0.8) color = Palettes.industrial.buildings[3];
-    else color = Palettes.desert[2];
+    let baseColor;
+    if (r < 0.6) baseColor = Palettes.industrial.ground[0];
+    else if (r < 0.8) baseColor = Palettes.industrial.ground[1];
+    else baseColor = Palettes.industrial.objects_accent[1];
+    const detailColors = [
+      Palettes.industrial.ground[3],
+      Palettes.industrial.objects_accent[0],
+      Palettes.industrial.emissive[0],
+    ];
     return {
-      type: "rect",
+      type: "textured_ground_rect",
       x: x,
       y: world.groundLevelY,
       width: Config.CANVAS_WIDTH * 0.5 + getRandomInt(0, 10),
-      height: 70,
-      color: color,
+      height: Config.CANVAS_HEIGHT - world.groundLevelY,
+      baseColor: baseColor,
+      detailColors: detailColors,
+      textureType: "industrial_asphalt_cracks",
+      originalColor: baseColor,
+      canRandomizeYOnWrap: false,
     };
   }
 
-  drawElement(ctx, element) {
+  drawElement(ctx, element, gameTime, scrollSpeedFactor = 1.0) {
+    const drawColor = element.tempColor || element.color || "#FF00FF";
+
+    let yOffset = 0;
+    const activeThemeForHaze = this.isTransitioning
+      ? this.transitionTargetTheme
+      : this.currentTheme;
+    if (
+      activeThemeForHaze === "desert_start" &&
+      scrollSpeedFactor < 0.3 &&
+      element.y > this.groundLevelY * 0.7
+    ) {
+      const waveAmplitude = 0.5 + scrollSpeedFactor * 2;
+      const waveFrequency = 0.03;
+      yOffset =
+        Math.sin(element.x * waveFrequency + gameTime * 3) * waveAmplitude;
+    }
+    const drawY = element.y + yOffset;
+
     if (element.type === "rect") {
       drawPixelRect(
         ctx,
         element.x,
-        element.y,
+        drawY,
         element.width,
         element.height,
-        element.color
+        drawColor
       );
-      return;
-    }
-    if (element.type === "cactus") {
+    } else if (element.type === "star") {
+      const currentAlpha = ctx.globalAlpha;
+      const blinkFactor =
+        (Math.sin(gameTime * element.blinkRate + element.blinkPhase) + 1) / 2;
+      ctx.globalAlpha *= element.initialBrightness * blinkFactor;
       drawPixelRect(
         ctx,
         element.x,
-        element.y,
+        drawY,
+        element.size,
+        element.size,
+        drawColor
+      );
+      ctx.globalAlpha = currentAlpha;
+    } else if (element.type === "celestial_body") {
+      const currentAlpha = ctx.globalAlpha;
+      ctx.globalAlpha *= 0.5;
+      drawPixelRect(
+        ctx,
+        element.x - element.radius * 1.2,
+        drawY - element.radius * 1.2,
+        element.radius * 2.4,
+        element.radius * 2.4,
+        element.glowColor
+      );
+      ctx.globalAlpha = currentAlpha;
+      drawPixelRect(
+        ctx,
+        element.x - element.radius,
+        drawY - element.radius,
+        element.radius * 2,
+        element.radius * 2,
+        drawColor
+      );
+      if (element.celestialType === "tech_moon") {
+        drawPixelRect(
+          ctx,
+          element.x - element.radius * 0.8,
+          drawY - element.radius * 0.2,
+          element.radius * 1.6,
+          element.radius * 0.4,
+          lightenDarkenColor(drawColor, -30)
+        );
+        drawPixelRect(
+          ctx,
+          element.x - element.radius * 0.2,
+          drawY - element.radius * 0.8,
+          element.radius * 0.4,
+          element.radius * 1.6,
+          lightenDarkenColor(drawColor, -30)
+        );
+        if (Math.floor(gameTime * 3) % 2 === 0) {
+          drawPixelRect(
+            ctx,
+            element.x + getRandomFloat(-1, 1) * element.radius * 0.7,
+            drawY + getRandomFloat(-1, 1) * element.radius * 0.7,
+            2,
+            2,
+            Palettes.futuristic.emissive[1]
+          );
+        }
+      } else if (
+        element.celestialType === "glitch_moon" &&
+        Math.floor(gameTime * 10) % 3 === 0
+      ) {
+        const glitchColor = getRandomColor(Palettes.gaming.emissive);
+        drawPixelRect(
+          ctx,
+          element.x - element.radius + getRandomInt(-5, 5),
+          drawY - element.radius + getRandomInt(-5, 5),
+          element.radius * 2 + getRandomInt(-2, 2),
+          element.radius * 2 + getRandomInt(-2, 2),
+          glitchColor
+        );
+      } else if (element.celestialType === "sun") {
+        // Add subtle rays for sun
+        const numRays = 8;
+        for (let i = 0; i < numRays; i++) {
+          const angle = (i / numRays) * Math.PI * 2 + gameTime * 0.1;
+          const rayLength = element.radius * 1.5;
+          const rayStartX = element.x + Math.cos(angle) * element.radius * 0.8;
+          const rayStartY = drawY + Math.sin(angle) * element.radius * 0.8;
+          const rayEndX = element.x + Math.cos(angle) * rayLength;
+          const rayEndY = drawY + Math.sin(angle) * rayLength;
+          ctx.globalAlpha =
+            currentAlpha * 0.15 * ((Math.sin(gameTime * 2 + i) + 1) / 2); // Pulsing alpha for rays
+          ctx.strokeStyle = element.glowColor;
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.moveTo(rayStartX, rayStartY);
+          ctx.lineTo(rayEndX, rayEndY);
+          ctx.stroke();
+        }
+        ctx.globalAlpha = currentAlpha; // Reset alpha after rays
+      }
+    } else if (element.type === "pixelCloud") {
+      const blockSize = Math.max(2, Math.floor(element.width / 10));
+      const numPuffs =
+        Math.floor(element.width / blockSize) *
+        Math.floor(element.height / blockSize) *
+        0.7;
+      for (let i = 0; i < numPuffs; i++) {
+        const puffX = element.x + Math.random() * (element.width - blockSize);
+        const puffY = drawY + Math.random() * (element.height - blockSize);
+        const puffColor =
+          Math.random() < 0.7 ? element.colors[0] : element.colors[1];
+        drawPixelRect(
+          ctx,
+          puffX,
+          puffY,
+          blockSize * getRandomFloat(0.8, 1.5),
+          blockSize * getRandomFloat(0.8, 1.5),
+          puffColor
+        );
+      }
+    } else if (element.type === "nebula") {
+      const currentAlpha = ctx.globalAlpha;
+      const numParticles = Math.floor(
+        (element.width * element.height * element.density) / 25
+      );
+      for (let i = 0; i < numParticles; i++) {
+        const px = element.x + Math.random() * element.width;
+        const py = drawY + Math.random() * element.height;
+        const psize = getRandomInt(3, 8);
+        ctx.globalAlpha = currentAlpha * getRandomFloat(0.3, 0.7);
+        drawPixelRect(
+          ctx,
+          px,
+          py,
+          psize,
+          psize,
+          getRandomColor(element.colors)
+        );
+      }
+      ctx.globalAlpha = currentAlpha;
+    } else if (element.type === "rect_simple_mountain") {
+      drawPixelRect(
+        ctx,
+        element.x,
+        drawY,
         element.width,
         element.height,
-        element.color
+        drawColor
+      );
+      drawPixelRect(
+        ctx,
+        element.x,
+        drawY,
+        element.width * 0.3,
+        element.height,
+        lightenDarkenColor(drawColor, -15)
+      );
+      drawPixelRect(
+        ctx,
+        element.x + element.width * 0.7,
+        drawY,
+        element.width * 0.3,
+        element.height,
+        lightenDarkenColor(drawColor, 15)
+      );
+    } else if (element.type === "mesa") {
+      const hThird = element.height / 3;
+      drawPixelRect(
+        ctx,
+        element.x,
+        drawY,
+        element.width,
+        hThird,
+        World.getSideColor(element.colors, "light")
+      );
+      drawPixelRect(
+        ctx,
+        element.x,
+        drawY + hThird,
+        element.width,
+        hThird,
+        World.getSideColor(element.colors, "base")
+      );
+      drawPixelRect(
+        ctx,
+        element.x,
+        drawY + hThird * 2,
+        element.width,
+        hThird,
+        World.getSideColor(element.colors, "shadow")
+      );
+      for (let i = 0; i < 5; i++) {
+        const lineX = element.x + getRandomInt(5, element.width - 5);
+        drawPixelRect(
+          ctx,
+          lineX,
+          drawY + hThird,
+          1,
+          hThird * 2,
+          lightenDarkenColor(World.getSideColor(element.colors, "base"), -20)
+        );
+      }
+    } else if (element.type === "cactus") {
+      drawPixelRect(
+        ctx,
+        element.x,
+        drawY,
+        element.width,
+        element.height,
+        drawColor
       );
       const armWidth = element.width * 0.75;
       const armHeight = element.height * 0.4;
@@ -1678,205 +4343,582 @@ class World {
         drawPixelRect(
           ctx,
           element.x - armWidth,
-          element.y + element.height * 0.2,
+          drawY + element.height * 0.2,
           armWidth,
           armHeight * 0.5,
-          element.color
+          drawColor
         );
         drawPixelRect(
           ctx,
           element.x + element.width,
-          element.y + element.height * 0.3,
+          drawY + element.height * 0.3,
           armWidth,
           armHeight * 0.5,
-          element.color
+          drawColor
         );
       }
-      return;
-    }
-    if (element.type === "pixelCloud") {
-      const blockSize = 5;
-      for (let i = 0; i < element.width / blockSize; i++) {
-        for (let j = 0; j < element.height / blockSize; j++) {
-          if (Math.random() > 0.25) {
+    } else if (element.type === "rock_pile") {
+      const numRocks = getRandomInt(3, 7);
+      for (let i = 0; i < numRocks; i++) {
+        const rSize = element.size * getRandomFloat(0.3, 0.6);
+        const rX = element.x + (Math.random() - 0.5) * element.size * 0.5;
+        const rY =
+          drawY + element.size - rSize - Math.random() * element.size * 0.3;
+        drawPixelRect(
+          ctx,
+          rX,
+          rY,
+          rSize,
+          rSize,
+          getRandomColor(element.colors)
+        );
+      }
+    } else if (element.type === "textured_ground_rect") {
+      drawPixelRect(
+        ctx,
+        element.x,
+        drawY,
+        element.width,
+        element.height,
+        element.baseColor
+      );
+      const numDetails = Math.floor(
+        (element.width * element.height) /
+          (element.textureType === "futuristic_guideways" ? 100 : 200)
+      );
+      for (let i = 0; i < numDetails; i++) {
+        const detailX = element.x + Math.random() * element.width;
+        const detailY = drawY + Math.random() * element.height * 0.3;
+        let dW, dH;
+        let detailColor = getRandomColor(element.detailColors);
+
+        if (element.textureType === "desert_cracks_pebbles") {
+          dW = Math.random() < 0.5 ? getRandomInt(5, 15) : getRandomInt(1, 3);
+          dH = Math.random() < 0.5 ? getRandomInt(1, 3) : getRandomInt(5, 15);
+        } else if (element.textureType === "gaming_grid_flowers") {
+          dW = getRandomInt(2, 4);
+          dH = getRandomInt(2, 4);
+          if (Math.random() < 0.1) detailColor = Palettes.gaming.emissive[2]; // Random pink flower
+        } else if (element.textureType === "futuristic_guideways") {
+          dW =
+            Math.random() < 0.7
+              ? element.width * getRandomFloat(0.3, 0.8)
+              : getRandomInt(3, 6);
+          dH = Math.random() < 0.7 ? getRandomInt(1, 2) : getRandomInt(3, 6);
+          if (dH <= 2 && Math.random() < 0.8)
+            detailColor = getRandomColor(Palettes.futuristic.emissive);
+        } else if (element.textureType === "industrial_asphalt_cracks") {
+          dW = Math.random() < 0.5 ? getRandomInt(10, 30) : getRandomInt(2, 5);
+          dH = Math.random() < 0.5 ? getRandomInt(1, 3) : getRandomInt(2, 5);
+          const laneMarkingY = drawY + element.height * 0.15;
+          const segmentScrollX = element.x + this.worldX * scrollSpeedFactor;
+          const dashLength = 30;
+          const gapLength = 20;
+          if (
+            i < 2 &&
+            Math.floor(segmentScrollX / (dashLength + gapLength)) % 2 === 0
+          ) {
             drawPixelRect(
               ctx,
-              element.x + i * blockSize,
-              element.y + j * blockSize,
-              blockSize,
-              blockSize,
-              (i + j) % 2 === 0 ? element.color : element.blockColor
+              element.x,
+              laneMarkingY + i * 5,
+              element.width,
+              2,
+              Palettes.industrial.emissive[1]
             );
           }
+          if (Math.random() < 0.05)
+            detailColor = Palettes.industrial.emissive[0]; // Random orange spark/stain
+        } else {
+          dW = getRandomInt(2, 8);
+          dH = getRandomInt(2, 8);
         }
+        drawPixelRect(ctx, detailX, detailY, dW, dH, detailColor);
       }
-      return;
-    }
-    if (element.type === "pixelStructure") {
-      const structBlockSize = Math.max(5, Math.floor(element.width / 10));
+    } else if (element.type === "debris") {
+      if (
+        element.debrisType === "wire" ||
+        element.debrisType === "rusty_pipe_fragment" ||
+        element.debrisType === "circuit_piece"
+      ) {
+        drawPixelRect(
+          ctx,
+          element.x,
+          drawY,
+          element.size,
+          element.height,
+          drawColor
+        );
+      } else if (element.debrisType === "gear") {
+        const r = element.size / 2;
+        drawPixelRect(
+          ctx,
+          element.x - r,
+          drawY - r,
+          element.size,
+          element.size,
+          drawColor
+        ); // Main circle
+        for (let i = 0; i < 6; i++) {
+          // Teeth
+          const angle = (i / 6) * Math.PI * 2;
+          const toothX = element.x + Math.cos(angle) * r;
+          const toothY = drawY + Math.sin(angle) * r;
+          drawPixelRect(
+            ctx,
+            toothX - 1,
+            toothY - 1,
+            2,
+            2,
+            lightenDarkenColor(drawColor, -20)
+          );
+        }
+      } else {
+        drawPixelRect(
+          ctx,
+          element.x,
+          drawY,
+          element.size,
+          element.size,
+          drawColor
+        );
+      }
+    } else if (element.type === "pixelStructure") {
+      const structBlockSize = Math.max(3, Math.floor(element.width / 10));
+      const objPalette = element.colors;
       for (let i = 0; i < element.width / structBlockSize; i++) {
         for (let j = 0; j < element.height / structBlockSize; j++) {
           if (
             Math.random() < element.density &&
             element.height - j * structBlockSize >
-              Math.random() * element.height * 0.6
+              Math.random() * element.height * 0.5
           ) {
+            let blockColor = World.getSideColor(objPalette, "base");
+            if (i < element.width / structBlockSize / 3)
+              blockColor = World.getSideColor(objPalette, "shadow");
+            else if (i > ((element.width / structBlockSize) * 2) / 3)
+              blockColor = World.getSideColor(objPalette, "light");
+
+            const activeThemeForLights = this.isTransitioning
+              ? this.transitionTargetTheme
+              : this.currentTheme;
+            if (
+              Math.random() < 0.05 &&
+              (activeThemeForLights === "gaming" ||
+                activeThemeForLights === "futuristic")
+            ) {
+              if (Math.floor(gameTime * (3 + Math.random() * 2)) % 2 === 0) {
+                blockColor = getRandomColor(
+                  Palettes[activeThemeForLights].emissive
+                );
+              }
+            }
             drawPixelRect(
               ctx,
               element.x + i * structBlockSize,
-              element.y + j * structBlockSize,
+              drawY + j * structBlockSize,
               structBlockSize,
               structBlockSize,
-              getRandomColor(element.colors)
+              blockColor
             );
           }
         }
       }
-      return;
-    }
-    if (element.type === "pixelTree") {
+    } else if (element.type === "rect_floating_island") {
+      drawPixelRect(
+        ctx,
+        element.x,
+        drawY,
+        element.width,
+        element.height * 0.7,
+        element.colors.top
+      );
+      drawPixelRect(
+        ctx,
+        element.x,
+        drawY + element.height * 0.7,
+        element.width,
+        element.height * 0.3,
+        element.colors.bottom
+      );
+      // Add some detail to floating island
+      for (let i = 0; i < 3; i++) {
+        drawPixelRect(
+          ctx,
+          element.x + getRandomInt(0, element.width - 5),
+          drawY + getRandomInt(0, element.height * 0.7 - 5),
+          5,
+          5,
+          lightenDarkenColor(element.colors.top, -20)
+        );
+      }
+    } else if (element.type === "pixelTree") {
       drawPixelRect(
         ctx,
         element.x + element.leavesWidth / 2 - element.trunkWidth / 2,
-        element.y + element.leavesHeight,
+        drawY + element.leavesHeight,
         element.trunkWidth,
         element.trunkHeight,
         element.trunkColor
       );
-      drawPixelRect(
-        ctx,
-        element.x,
-        element.y,
-        element.leavesWidth,
-        element.leavesHeight,
-        element.leavesColor
-      );
-      drawPixelRect(
-        ctx,
-        element.x + 2,
-        element.y + 2,
-        element.leavesWidth - 4,
-        element.leavesHeight - 4,
-        lightenDarkenColor(element.leavesColor, -30)
-      );
-      return;
-    }
-    if (element.type === "futuristicTower") {
-      const baseColor = element.colors[getRandomInt(0, 1)];
-      drawPixelRect(
-        ctx,
-        element.x,
-        element.y,
-        element.width,
-        element.height,
-        baseColor
-      );
-      const numLights = getRandomInt(
-        Math.floor(element.height / 20),
-        Math.floor(element.height / 10)
-      );
-      for (let i = 0; i < numLights; i++) {
-        if (Math.random() < 0.7) {
-          const lightX =
-            element.x +
-            getRandomInt(
-              Math.floor(element.width * 0.1),
-              Math.floor(element.width * 0.9) - 2
+      const leafBlockSize = Math.max(2, Math.floor(element.leavesWidth / 5));
+      for (let r = 0; r < element.leavesHeight / leafBlockSize; r++) {
+        for (let c = 0; c < element.leavesWidth / leafBlockSize; c++) {
+          if (Math.random() < 0.8) {
+            const color =
+              Math.random() < 0.7
+                ? element.leavesColor
+                : element.leavesHighlight;
+            drawPixelRect(
+              ctx,
+              element.x + c * leafBlockSize,
+              drawY + r * leafBlockSize,
+              leafBlockSize,
+              leafBlockSize,
+              color
             );
-          const lightY =
-            element.y +
-            getRandomInt(
-              Math.floor(element.height * 0.1),
-              Math.floor(element.height * 0.9) - 2
-            );
-          const lightSize = getRandomInt(1, 3);
-          drawPixelRect(
-            ctx,
-            lightX,
-            lightY,
-            lightSize,
-            lightSize,
-            getRandomColor(element.lightColors)
-          );
+          }
         }
       }
+    } else if (element.type === "giant_mushroom") {
       drawPixelRect(
         ctx,
-        element.x + element.width * 0.2,
-        element.y - 5,
-        element.width * 0.6,
+        element.x - element.stemWidth / 2,
+        drawY + element.capRadius,
+        element.stemWidth,
+        element.stemHeight,
+        element.colors.stem
+      );
+      drawPixelRect(
+        ctx,
+        element.x - element.capRadius,
+        drawY,
+        element.capRadius * 2,
+        element.capRadius,
+        element.colors.capTop
+      );
+      const numSpots = getRandomInt(3, 7);
+      for (let i = 0; i < numSpots; i++) {
+        const spotSize = element.capRadius * 0.2;
+        const spotX =
+          element.x -
+          element.capRadius +
+          Math.random() * (element.capRadius * 2 - spotSize);
+        const spotY = drawY + Math.random() * (element.capRadius - spotSize);
+        drawPixelRect(
+          ctx,
+          spotX,
+          spotY,
+          spotSize,
+          spotSize,
+          element.colors.capSpots
+        );
+      }
+    } else if (element.type === "power_up_box") {
+      drawPixelRect(
+        ctx,
+        element.x,
+        drawY,
+        element.size,
+        element.size,
+        element.colors.box
+      );
+      if (Math.floor(gameTime * 2) % 2 === 0 || !element.isEmissive) {
+        drawPixelRect(
+          ctx,
+          element.x + element.size * 0.3,
+          drawY + element.size * 0.2,
+          element.size * 0.4,
+          element.size * 0.15,
+          element.colors.symbol
+        );
+        drawPixelRect(
+          ctx,
+          element.x + element.size * 0.55,
+          drawY + element.size * 0.35,
+          element.size * 0.15,
+          element.size * 0.15,
+          element.colors.symbol
+        );
+        drawPixelRect(
+          ctx,
+          element.x + element.size * 0.4,
+          drawY + element.size * 0.5,
+          element.size * 0.2,
+          element.size * 0.15,
+          element.colors.symbol
+        );
+        drawPixelRect(
+          ctx,
+          element.x + element.size * 0.4,
+          drawY + element.size * 0.8,
+          element.size * 0.2,
+          element.size * 0.1,
+          element.colors.symbol
+        );
+      }
+    } else if (element.type === "futuristicTower") {
+      const objPalette = element.colors;
+      const baseC = World.getSideColor(objPalette, "base");
+      const lightC = World.getSideColor(objPalette, "light");
+      const shadowC = World.getSideColor(objPalette, "shadow");
+
+      drawPixelRect(
+        ctx,
+        element.x,
+        drawY,
+        element.width,
+        element.height,
+        baseC
+      );
+      drawPixelRect(
+        ctx,
+        element.x,
+        drawY,
+        element.width * 0.2,
+        element.height,
+        shadowC
+      );
+      drawPixelRect(
+        ctx,
+        element.x + element.width * 0.8,
+        drawY,
+        element.width * 0.2,
+        element.height,
+        lightC
+      );
+
+      const numLights = element.lights
+        ? element.lights.length
+        : Math.floor(element.height / 15);
+      if (!element.lights) {
+        element.lights = [];
+        for (let i = 0; i < numLights; i++) {
+          element.lights.push({
+            x_offset: getRandomInt(
+              element.width * 0.2,
+              element.width * 0.8 - 1
+            ),
+            y_offset: getRandomInt(
+              element.height * 0.1,
+              element.height * 0.9 - 1
+            ),
+            color: getRandomColor(element.lightColors),
+            blinkRate: getRandomFloat(1, 4),
+            blinkPhase: getRandomFloat(0, Math.PI * 2),
+          });
+        }
+      }
+      element.lights.forEach((light) => {
+        if (
+          Math.floor(gameTime * light.blinkRate + light.blinkPhase) % 2 ===
+          0
+        ) {
+          drawPixelRect(
+            ctx,
+            element.x + light.x_offset,
+            drawY + light.y_offset,
+            1,
+            1,
+            light.color
+          );
+        }
+      });
+      drawPixelRect(
+        ctx,
+        element.x + element.width * 0.4,
+        drawY - 10,
+        element.width * 0.2,
+        10,
+        baseC
+      );
+      drawPixelRect(
+        ctx,
+        element.x + element.width * 0.45,
+        drawY - 15,
+        element.width * 0.1,
         5,
         getRandomColor(element.lightColors)
       );
-      return;
-    }
-    if (element.type === "glowingOrb") {
-      ctx.globalAlpha = 0.5;
-      drawPixelRect(
-        ctx,
-        element.x - element.radius,
-        element.y - element.radius,
-        element.radius * 2,
-        element.radius * 2,
-        element.color
-      );
-      ctx.globalAlpha = 1.0;
-      drawPixelRect(
-        ctx,
-        element.x - element.radius * 0.6,
-        element.y - element.radius * 0.6,
-        element.radius * 1.2,
-        element.radius * 1.2,
-        lightenDarkenColor(element.color, 50)
-      );
-      return;
-    }
-    if (element.type === "industrialBuilding") {
-      const mainColor = getRandomColor(element.colors);
+    } else if (element.type === "rect_platform") {
       drawPixelRect(
         ctx,
         element.x,
-        element.y,
+        drawY,
         element.width,
         element.height,
-        mainColor
+        element.colors.base
       );
-      const numFeatures = getRandomInt(2, 5);
-      for (let i = 0; i < numFeatures; i++) {
-        if (Math.random() < 0.8) {
-          const featureX =
-            element.x +
-            getRandomInt(
-              Math.floor(element.width * 0.1),
-              Math.floor(element.width * 0.8)
-            );
-          const featureY =
-            element.y +
-            getRandomInt(
-              Math.floor(element.height * 0.1),
-              Math.floor(element.height * 0.8)
-            );
-          const featureW = getRandomInt(5, 15);
-          const featureH = getRandomInt(5, 10);
-          drawPixelRect(
-            ctx,
-            featureX,
-            featureY,
-            featureW,
-            featureH,
-            lightenDarkenColor(mainColor, -40)
-          );
-        }
-      }
       drawPixelRect(
         ctx,
         element.x,
-        element.y - 3,
+        drawY + element.height - 2,
         element.width,
-        3,
-        getRandomColor(element.accentColors)
+        2,
+        element.colors.trim
       );
-      return;
+    } else if (element.type === "energy_pylon") {
+      drawPixelRect(
+        ctx,
+        element.x,
+        drawY,
+        element.width,
+        element.height,
+        element.colors.structure
+      );
+      // Pulsing core
+      const pulse = (Math.sin(gameTime * 5) + 1) / 2;
+      const coreHeight = element.height * (0.3 + pulse * 0.2);
+      const coreY = drawY + (element.height - coreHeight) / 2;
+      drawPixelRect(
+        ctx,
+        element.x + element.width * 0.25,
+        coreY,
+        element.width * 0.5,
+        coreHeight,
+        element.colors.emissive_core
+      );
+    } else if (
+      element.type === "industrialBuilding" ||
+      element.type === "industrialSmokestack"
+    ) {
+      const objPalette = element.colors;
+      const baseC = World.getSideColor(objPalette, "base");
+      const lightC = World.getSideColor(objPalette, "light");
+      const shadowC = World.getSideColor(objPalette, "shadow");
+
+      drawPixelRect(
+        ctx,
+        element.x,
+        drawY,
+        element.width,
+        element.height,
+        baseC
+      );
+      drawPixelRect(
+        ctx,
+        element.x,
+        drawY,
+        element.width * 0.2,
+        element.height,
+        shadowC
+      );
+      drawPixelRect(
+        ctx,
+        element.x + element.width * 0.8,
+        drawY,
+        element.width * 0.2,
+        element.height,
+        lightC
+      );
+
+      const numFeatures = Math.floor((element.width * element.height) / 500);
+      for (let i = 0; i < numFeatures; i++) {
+        const fX =
+          element.x +
+          getRandomInt(element.width * 0.2, element.width * 0.8 - 5);
+        const fY =
+          drawY + getRandomInt(element.height * 0.1, element.height * 0.8 - 5);
+        const fW = getRandomInt(3, 8);
+        const fH = getRandomInt(3, 8);
+        drawPixelRect(
+          ctx,
+          fX,
+          fY,
+          fW,
+          fH,
+          Math.random() < 0.2
+            ? getRandomColor(Palettes.industrial.emissive)
+            : shadowC
+        );
+      }
+      if (element.type === "industrialSmokestack") {
+        if (Math.random() < 0.3) {
+          const smokeX = element.x + element.width / 2 + getRandomFloat(-5, 5);
+          const smokeY = drawY + getRandomFloat(-5, 0);
+          const smokeParticle = new Particle(
+            smokeX,
+            smokeY,
+            getRandomFloat(-5, 5),
+            getRandomFloat(-10, -20),
+            getRandomFloat(1, 3),
+            getRandomInt(3, 8),
+            getRandomColor(element.smokeColors),
+            getRandomFloat(0.2, 0.5),
+            "weather"
+          );
+          smokeParticle.gravity = -5;
+          this.weatherParticles.push(smokeParticle);
+        }
+      }
+    } else if (element.type === "rect_crates") {
+      drawPixelRect(
+        ctx,
+        element.x,
+        drawY,
+        element.width,
+        element.height,
+        drawColor
+      );
+      drawPixelRect(
+        ctx,
+        element.x + 1,
+        drawY + 1,
+        element.width - 2,
+        element.height - 2,
+        lightenDarkenColor(drawColor, -20)
+      );
+      // Add some wood grain/panel lines
+      drawPixelRect(
+        ctx,
+        element.x + element.width * 0.4,
+        drawY,
+        2,
+        element.height,
+        lightenDarkenColor(drawColor, -30)
+      );
+      drawPixelRect(
+        ctx,
+        element.x,
+        drawY + element.height * 0.4,
+        element.width,
+        2,
+        lightenDarkenColor(drawColor, -30)
+      );
+    } else if (element.type === "rect_pipes") {
+      drawPixelRect(
+        ctx,
+        element.x,
+        drawY,
+        element.width,
+        element.height,
+        drawColor
+      );
+      drawPixelRect(
+        ctx,
+        element.x,
+        drawY,
+        element.width,
+        element.height * 0.3,
+        lightenDarkenColor(drawColor, 20)
+      );
+    } else if (element.type === "rubble_pile") {
+      for (let i = 0; i < 5; i++) {
+        const rX = element.x + (Math.random() - 0.5) * element.size * 0.8;
+        const rY =
+          drawY +
+          (Math.random() - 0.5) * element.size * 0.3 +
+          element.size * 0.2;
+        const rSize = element.size * getRandomFloat(0.2, 0.5);
+        drawPixelRect(
+          ctx,
+          rX,
+          rY,
+          rSize,
+          rSize,
+          getRandomColor(element.colors)
+        );
+      }
     }
   }
 
@@ -1888,17 +4930,17 @@ class World {
       newLayers.push(
         new ParallaxLayer(
           lc.speed,
-          "",
-          World.layerGenerators[theme][lc.type],
+          lc.generator,
           lc.count,
           this.game,
           this,
-          lc.type,
+          lc,
           false,
           initialXOffset
         )
       );
     });
+    newLayers.sort((a, b) => a.scrollSpeedFactor - b.scrollSpeedFactor);
     return newLayers;
   }
 
@@ -1911,8 +4953,14 @@ class World {
       this.isTransitioning = true;
       this.transitionProgress = 0;
 
-      this.transitionSourceSky = this.skyColor;
-      this.transitionTargetSky = newThemeData.skyColor;
+      const sourcePalette = Palettes[this.currentTheme] || Palettes.desert;
+      this.transitionSourceSky =
+        (sourcePalette.sky && sourcePalette.sky[0]) || this.skyColor;
+
+      const targetPalette = Palettes[newThemeData.theme] || Palettes.desert;
+      this.transitionTargetSky =
+        (targetPalette.sky && targetPalette.sky[0]) || "#87CEEB";
+
       this.transitionSourceTheme = this.currentTheme;
       this.transitionTargetTheme = newThemeData.theme;
 
@@ -1921,22 +4969,110 @@ class World {
         layer.isSourceLayer = true;
       });
 
-      // Initialize new layers for the target theme, starting further off-screen to the right
-      // This creates a buffer where old assets can scroll off before new ones appear.
-      // Config.CANVAS_WIDTH * 1.5 means new assets start 1.5 screen widths away.
-      // They will become visible after player travels 0.5 screen widths into the transition.
-      const targetLayerInitialXOffset = Config.CANVAS_WIDTH * 1.5;
+      const targetLayerInitialXOffset = this.worldX + Config.CANVAS_WIDTH;
       this.targetLayers = this.initLayers(
         this.transitionTargetTheme,
         targetLayerInitialXOffset
       );
+
+      this.weatherParticles = [];
     } else if (
       !this.isTransitioning &&
       this.currentTheme === newThemeData.theme
     ) {
-      // This case handles if getCurrentZone returns the same theme but maybe a different sky color
-      // (though current getCurrentZone logic doesn't change sky for same theme)
-      this.skyColor = newThemeData.skyColor;
+      const currentPalette = Palettes[this.currentTheme] || Palettes.desert;
+      this.skyColor =
+        (currentPalette.sky && currentPalette.sky[0]) || this.skyColor;
+      this.currentTopSky = this.skyColor;
+      this.currentHorizonSky =
+        (currentPalette.sky && currentPalette.sky[1]) ||
+        lightenDarkenColor(this.currentTopSky, 30);
+    }
+  }
+
+  updateWeatherParticles(deltaTime) {
+    for (let i = this.weatherParticles.length - 1; i >= 0; i--) {
+      this.weatherParticles[i].update(deltaTime);
+      if (
+        this.weatherParticles[i].lifespan <= 0 ||
+        this.weatherParticles[i].y > Config.CANVAS_HEIGHT + 20 ||
+        this.weatherParticles[i].y < -20 ||
+        this.weatherParticles[i].x < -20 ||
+        this.weatherParticles[i].x > Config.CANVAS_WIDTH + 20
+      ) {
+        this.weatherParticles.splice(i, 1);
+      }
+    }
+  }
+
+  emitWeatherParticles() {
+    if (this.weatherParticles.length >= this.maxWeatherParticles) return;
+
+    const theme = this.isTransitioning
+      ? this.transitionTargetTheme
+      : this.currentTheme;
+    const chance = Math.random();
+    const paletteForWeather = Palettes[theme] || Palettes.desert;
+
+    if (theme === "desert_start" && chance < 0.05) {
+      const particle = new Particle(
+        Math.random() < 0.5 ? -10 : Config.CANVAS_WIDTH + 10,
+        getRandomFloat(this.groundLevelY - 50, this.groundLevelY + 20),
+        (Math.random() < 0.5 ? 1 : -1) * getRandomFloat(20, 50),
+        getRandomFloat(-10, 10),
+        getRandomFloat(3, 6),
+        getRandomInt(2, 5),
+        getRandomColor(paletteForWeather.generic_dust || ["#A0522D"]),
+        getRandomFloat(0.1, 0.4),
+        "weather"
+      );
+      particle.drag = 0.99;
+      this.weatherParticles.push(particle);
+    } else if (theme === "industrial" && chance < 0.1) {
+      const particle = new Particle(
+        getRandomFloat(0, Config.CANVAS_WIDTH),
+        -10,
+        getRandomFloat(-5, 5),
+        getRandomFloat(30, 60),
+        getRandomFloat(2, 4),
+        getRandomInt(1, 2),
+        getRandomColor(
+          (paletteForWeather.smoke || ["#A9A9A9"]).map((c) => c + "66")
+        ),
+        getRandomFloat(0.2, 0.5),
+        "weather"
+      );
+      this.weatherParticles.push(particle);
+    } else if (theme === "gaming" && chance < 0.03) {
+      // Glitchy particles for gaming theme
+      const particle = new Particle(
+        getRandomFloat(0, Config.CANVAS_WIDTH),
+        getRandomFloat(0, Config.CANVAS_HEIGHT),
+        getRandomFloat(-20, 20),
+        getRandomFloat(-20, 20),
+        getRandomFloat(0.2, 0.5),
+        getRandomInt(2, 4),
+        getRandomColor(Palettes.gaming.emissive),
+        getRandomFloat(0.5, 0.8),
+        "weather"
+      );
+      particle.drag = 0.9;
+      this.weatherParticles.push(particle);
+    } else if (theme === "futuristic" && chance < 0.04) {
+      // Soft energy motes for futuristic
+      const particle = new Particle(
+        getRandomFloat(0, Config.CANVAS_WIDTH),
+        getRandomFloat(0, Config.CANVAS_HEIGHT),
+        getRandomFloat(-10, 10),
+        getRandomFloat(-10, 10),
+        getRandomFloat(1, 2),
+        getRandomInt(1, 3),
+        getRandomColor(Palettes.futuristic.emissive.map((c) => c + "44")), // semi-transparent
+        getRandomFloat(0.3, 0.6),
+        "weather"
+      );
+      particle.gravity = getRandomFloat(-2, 2); // slow drift
+      this.weatherParticles.push(particle);
     }
   }
 
@@ -1946,12 +5082,10 @@ class World {
     this.handleThemeChange(currentZoneInfo);
 
     if (this.isTransitioning) {
-      if (this.sourceLayers) {
+      if (this.sourceLayers)
         this.sourceLayers.forEach((layer) => layer.update(worldScrollSpeed));
-      }
-      if (this.targetLayers) {
+      if (this.targetLayers)
         this.targetLayers.forEach((layer) => layer.update(worldScrollSpeed));
-      }
 
       if (this.transitionDurationWorldUnits > 0 && worldScrollSpeed !== 0) {
         const progressIncrement =
@@ -1961,20 +5095,35 @@ class World {
         this.transitionDurationWorldUnits === 0 &&
         worldScrollSpeed !== 0
       ) {
-        // Ensure progress if duration is 0 but moving
         this.transitionProgress = 1;
-      } else if (
-        this.transitionDurationWorldUnits === 0 &&
-        worldScrollSpeed === 0
-      ) {
-        // If duration is 0 and not moving, do nothing to progress to avoid instant snap if player is idle at boundary
       }
-
       this.transitionProgress = Math.min(this.transitionProgress, 1);
 
-      this.skyColor = interpolateColor(
-        this.transitionSourceSky,
-        this.transitionTargetSky,
+      const sourcePalette =
+        Palettes[this.transitionSourceTheme] || Palettes.desert;
+      const targetPalette =
+        Palettes[this.transitionTargetTheme] || Palettes.desert;
+
+      const sourceTop =
+        (sourcePalette.sky && sourcePalette.sky[0]) || this.transitionSourceSky;
+      const sourceHorizon =
+        (sourcePalette.sky && sourcePalette.sky[1]) ||
+        lightenDarkenColor(sourceTop, 30);
+
+      const targetTop =
+        (targetPalette.sky && targetPalette.sky[0]) || this.transitionTargetSky;
+      const targetHorizon =
+        (targetPalette.sky && targetPalette.sky[1]) ||
+        lightenDarkenColor(targetTop, 30);
+
+      this.currentTopSky = interpolateColor(
+        sourceTop,
+        targetTop,
+        this.transitionProgress
+      );
+      this.currentHorizonSky = interpolateColor(
+        sourceHorizon,
+        targetHorizon,
         this.transitionProgress
       );
 
@@ -1983,74 +5132,116 @@ class World {
           console.log(`Transition to ${this.transitionTargetTheme} complete.`);
         this.isTransitioning = false;
         this.currentTheme = this.transitionTargetTheme;
-        this.skyColor = this.transitionTargetSky; // Ensure final sky color is set
-        this.layers = this.targetLayers; // Old sourceLayers are naturally culled by their update logic
 
+        const finalPalette = Palettes[this.currentTheme] || Palettes.desert;
+        this.skyColor =
+          (finalPalette.sky && finalPalette.sky[0]) || this.transitionTargetSky;
+        this.currentTopSky = this.skyColor;
+        this.currentHorizonSky =
+          (finalPalette.sky && finalPalette.sky[1]) ||
+          lightenDarkenColor(this.currentTopSky, 30);
+
+        this.layers = this.targetLayers;
         this.sourceLayers = null;
         this.targetLayers = null;
       }
     } else {
-      // Not transitioning, just update current layers
       this.layers.forEach((layer) => layer.update(worldScrollSpeed));
+      const currentPalette = Palettes[this.currentTheme] || Palettes.desert;
+      this.currentTopSky =
+        (currentPalette.sky && currentPalette.sky[0]) || this.skyColor;
+      this.currentHorizonSky =
+        (currentPalette.sky && currentPalette.sky[1]) ||
+        lightenDarkenColor(this.currentTopSky, 30);
     }
+
+    this.emitWeatherParticles();
+    this.updateWeatherParticles(this.game.deltaTime);
   }
 
   render(ctx) {
-    ctx.fillStyle = this.skyColor;
+    const skyGradient = ctx.createLinearGradient(0, 0, 0, this.groundLevelY);
+    skyGradient.addColorStop(0, this.currentTopSky);
+    skyGradient.addColorStop(1, this.currentHorizonSky);
+    ctx.fillStyle = skyGradient;
     ctx.fillRect(0, 0, Config.CANVAS_WIDTH, Config.CANVAS_HEIGHT);
 
-    // Render active layers or transitioning layers
-    if (this.isTransitioning) {
-      if (this.sourceLayers) {
-        this.sourceLayers.forEach((layer) => layer.render(ctx));
+    const activeThemeForFog = this.isTransitioning
+      ? this.transitionTargetTheme
+      : this.currentTheme;
+    const themePalette = Palettes[activeThemeForFog] || Palettes.desert;
+    if (
+      themePalette.atmosphere &&
+      themePalette.atmosphere.fogColor &&
+      themePalette.atmosphere.fogColor !== "rgba(0,0,0,0.0)"
+    ) {
+      const originalAlpha = ctx.globalAlpha;
+      if (
+        typeof themePalette.atmosphere.fogColor === "string" &&
+        themePalette.atmosphere.fogColor.includes("rgba")
+      ) {
+        ctx.fillStyle = themePalette.atmosphere.fogColor;
+      } else {
+        ctx.globalAlpha = 0.15;
+        ctx.fillStyle = themePalette.atmosphere.fogColor || "#FFFFFF";
       }
-      if (this.targetLayers) {
-        this.targetLayers.forEach((layer) => layer.render(ctx));
-      }
-    } else {
-      this.layers.forEach((layer) => layer.render(ctx));
+      ctx.fillRect(0, 0, Config.CANVAS_WIDTH, Config.CANVAS_HEIGHT);
+      ctx.globalAlpha = originalAlpha;
     }
 
-    if (Config.DEBUG_MODE) {
-      ctx.fillStyle = "white";
-      ctx.font = "12px Courier New";
-      ctx.textAlign = "left";
-      ctx.fillText(`WorldX: ${this.worldX.toFixed(0)}`, 10, 60);
-      let themeStatus = `Theme: ${this.currentTheme}`;
-      if (this.isTransitioning) {
-        themeStatus += ` (T: ${this.transitionTargetTheme} ${Math.round(
-          this.transitionProgress * 100
-        )}%)`;
-        if (this.sourceLayers)
-          ctx.fillText(
-            `Source Layers: ${this.sourceLayers.reduce(
-              (sum, l) => sum + l.elements.length,
-              0
-            )} elements`,
-            10,
-            90
-          );
-        if (this.targetLayers)
-          ctx.fillText(
-            `Target Layers: ${this.targetLayers.reduce(
-              (sum, l) => sum + l.elements.length,
-              0
-            )} elements`,
-            10,
-            105
-          );
-      } else {
-        ctx.fillText(
-          `Active Layers: ${this.layers.reduce(
-            (sum, l) => sum + l.elements.length,
-            0
-          )} elements`,
-          10,
-          90
-        );
+    const layersToRender = this.isTransitioning
+      ? [...(this.sourceLayers || []), ...(this.targetLayers || [])].sort(
+          (a, b) => a.scrollSpeedFactor - b.scrollSpeedFactor
+        )
+      : this.layers;
+
+    layersToRender.forEach((layer) => {
+      if (
+        layer.layerConfig.type === "foreground_debris" &&
+        layer.scrollSpeedFactor > 1
+      )
+        return;
+      layer.render(ctx);
+    });
+
+    // Render weather particles that should be behind player/main scene elements
+    // And also not too far in the distance (e.g. above horizon)
+    this.weatherParticles.forEach((p) => {
+      if (
+        p.type === "weather" &&
+        p.y < this.groundLevelY + 40 &&
+        p.y > this.groundLevelY * 0.3
+      ) {
+        p.render(ctx);
       }
-      ctx.fillText(themeStatus, 10, 75);
-    }
+    });
+  }
+
+  renderForeground(ctx) {
+    const layersToRender = this.isTransitioning
+      ? [...(this.sourceLayers || []), ...(this.targetLayers || [])].sort(
+          (a, b) => a.scrollSpeedFactor - b.scrollSpeedFactor
+        )
+      : this.layers;
+
+    layersToRender.forEach((layer) => {
+      if (
+        layer.layerConfig.type === "foreground_debris" &&
+        layer.scrollSpeedFactor > 1
+      ) {
+        layer.render(ctx);
+      }
+    });
+    // Render weather particles that should be in front (e.g. very close rain, or all weather if desired)
+    this.weatherParticles.forEach((p) => {
+      if (
+        p.type === "weather" &&
+        (p.y >= this.groundLevelY + 40 || p.y <= this.groundLevelY * 0.3)
+      ) {
+        // Example: close or very high weather
+        p.render(ctx);
+      }
+    });
   }
 }
 
