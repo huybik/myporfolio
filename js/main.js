@@ -20,6 +20,9 @@ class Game {
     this.ctx.webkitImageSmoothingEnabled = false;
     this.ctx.msImageSmoothingEnabled = false;
 
+    // Auto-focus the canvas to capture keyboard input immediately on page load
+    this.canvas.focus();
+
     this.player = new Player(this);
     this.world = new World(this);
     this.ui = new UI(this);

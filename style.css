@@ -21,6 +21,11 @@ canvas {
   image-rendering: crisp-edges;
 }
 
+/* Hide the default focus outline on the canvas for a cleaner look */
+canvas:focus {
+  outline: none;
+}
+
 /* Example for a custom pixel font if loaded via CSS */
 /*
   @font-face {
