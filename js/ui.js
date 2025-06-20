@@ -67,24 +67,40 @@ class UI {
     ctx.fillStyle = this.textColor;
     ctx.font = this.font;
     ctx.textAlign = "center";
-    const activePrompt = StopsManager.getActiveStopPrompt();
-    let displayText = "";
+
     const currentZone = StopsManager.getCurrentZone(this.game.world.worldX);
-    if (activePrompt) {
-      displayText = activePrompt;
-    } else if (currentZone) {
-      displayText = `Zone: ${currentZone.name}`;
-    } else {
-      displayText = "Portfolio Drive";
+    let displayText = "Portfolio Drive"; // Default text
+    let hasInteractivePrompt = false;
+
+    if (currentZone) {
+      if (currentZone.linkURL) {
+        displayText = `${currentZone.name}-Press F to enter`;
+        hasInteractivePrompt = true;
+      } else if (currentZone.name) {
+        // For zones without a direct link (e.g., "Desert Drive")
+        displayText = `${currentZone.name}`;
+      }
     }
+
     const textY = this.infoScreenY + this.infoScreenHeight / 2 + 6;
-    if (this.game.frameCount % 10 < 8 || !activePrompt) {
+
+    // Blinking logic for interactive prompts
+    if (hasInteractivePrompt) {
+      // Blink the text
+      ctx.fillText(
+        displayText,
+        this.infoScreenX + this.infoScreenWidth / 2,
+        textY
+      );
+    } else {
+      // Always display non-interactive text
       ctx.fillText(
         displayText,
         this.infoScreenX + this.infoScreenWidth / 2,
         textY
       );
     }
+
     ctx.strokeStyle = "rgba(50, 100, 50, 0.15)";
     ctx.lineWidth = 1;
     for (let i = 0; i < this.infoScreenHeight; i += 3) {
@@ -106,12 +122,15 @@ class UI {
     const startX = padding + 20;
     const lightY = this.yPosition + (this.height - lightSize) / 2;
     for (let i = 0; i < 3; i++) {
-      let lightColor = "#550000";
-      if (i === 0 && this.game.player.currentSpeed !== 0)
-        lightColor = "#00AA00";
-      else if (i === 1 && StopsManager.activeStop) lightColor = "#FFAA00";
-      else if (i === 2 && this.game.frameCount % 60 < 30)
-        lightColor = "#0055AA";
+      let lightColor = "#550000"; // Off
+      if (i === 0 && this.game.player.currentSpeed !== 0) {
+        lightColor = "#00AA00"; // Green for moving
+      } else if (i === 1 && StopsManager.activeStop) {
+        // Yellow if near a marker (StopsManager.activeStop is set when close to a marker)
+        lightColor = "#FFAA00";
+      } else if (i === 2 && this.game.frameCount % 60 < 30) {
+        lightColor = "#0055AA"; // Blue, blinking (system pulse or generic indicator)
+      }
       drawPixelRect(
         ctx,
         startX + i * (lightSize + padding),
@@ -155,16 +174,39 @@ class UI {
     );
     StopsManager.stops.forEach((stop, index) => {
       if (index < 3) {
+        // Limit to 3 dots for simplicity
         const stopProgress =
           (stop.worldPositionX - this.game.world.worldX) /
-          StopsManager.stops[StopsManager.stops.length - 1].worldPositionX;
+          (StopsManager.stops[StopsManager.stops.length - 1].worldPositionX ||
+            1); // Avoid div by zero if only one stop
         const stopDotX = mapX + 5 + index * (mapSize / 4);
-        const stopDotY = mapY + mapSize * 0.75 - stopProgress * mapSize * 0.5;
-        let stopColor = "#505050";
+        // Adjust Y position calculation for minimap dots
+        let stopDotY = mapY + mapSize * 0.75 - stopProgress * mapSize * 0.5;
+        stopDotY = Math.max(mapY + 2, Math.min(mapY + mapSize - 5, stopDotY));
+
+        let stopColor = "#505050"; // Default inactive
         if (StopsManager.activeStop && StopsManager.activeStop.id === stop.id) {
-          stopColor = Palettes.gaming.props[1];
-        } else if (this.game.world.worldX > stop.worldPositionX) {
-          stopColor = Palettes.gaming.props[0];
+          stopColor = Palettes.gaming.props[1]; // Yellow if marker is active
+        } else if (
+          this.game.world.worldX >
+          stop.worldPositionX - StopsManager.stopActivationRange / 2
+        ) {
+          // Check if player has passed the marker or is very close to it from the left
+          const currentZoneForMinimap = StopsManager.getCurrentZone(
+            this.game.world.worldX
+          );
+          if (
+            currentZoneForMinimap &&
+            currentZoneForMinimap.stopId === stop.id
+          ) {
+            // If currently in the zone associated with this stop
+            stopColor = Palettes.gaming.props[2]; // Green for current zone's marker
+          } else if (
+            this.game.world.worldX >
+            stop.worldPositionX + StopsManager.stopActivationRange / 2
+          ) {
+            stopColor = Palettes.gaming.props[0]; // Red if passed
+          }
         }
         drawPixelRect(
           ctx,

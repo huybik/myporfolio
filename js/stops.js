@@ -277,14 +277,11 @@ const StopMarkers = {
 
 const StopsManager = {
   stops: [],
-  activeStop: null,
-  stopActivationRange: 100,
+  activeStop: null, // Used for visual highlighting of the marker
+  stopActivationRange: 100, // Proximity to marker for visual activation
   init() {
-    // Increased worldPositionX for stops to create more distance between them.
-    // Original: 1500, 3500, 5500
-    // New: Using a larger delta, e.g., 4000-5000 between stops.
-    const initialStopPosition = 2500; // Start first stop further out
-    const distanceBetweenStops = 4500; // Increased distance
+    const initialStopPosition = 2500;
+    const distanceBetweenStops = 4500;
 
     this.stops = [
       {
@@ -292,27 +289,27 @@ const StopsManager = {
         worldPositionX: initialStopPosition,
         theme: "gaming",
         linkURL: "https://example.com/ai-game-project",
-        promptText: "Press [F] for AI Game Project",
+        promptText: "AI Game Project Details", // Original prompt, less used now for main UI
         markerAssetFunction: StopMarkers.drawArcadeCabinet,
         markerScreenYOffset: 0,
         isReached: false,
       },
       {
         id: "project_ai_ta",
-        worldPositionX: initialStopPosition + distanceBetweenStops, // e.g., 2500 + 4500 = 7000
+        worldPositionX: initialStopPosition + distanceBetweenStops,
         theme: "futuristic",
         linkURL: "https://example.com/ai-ta-project",
-        promptText: "Press [F] for AI TA Project",
+        promptText: "AI TA Project Details",
         markerAssetFunction: StopMarkers.drawHolographicTerminal,
         markerScreenYOffset: 0,
         isReached: false,
       },
       {
         id: "project_truck_parts",
-        worldPositionX: initialStopPosition + 2 * distanceBetweenStops, // e.g., 7000 + 4500 = 11500
+        worldPositionX: initialStopPosition + 2 * distanceBetweenStops,
         theme: "industrial",
         linkURL: "https://example.com/truck-parts-project",
-        promptText: "Press [F] for Truck Parts Project",
+        promptText: "Truck Parts Project Details",
         markerAssetFunction: StopMarkers.drawPixelWarehouse,
         markerScreenYOffset: 0,
         isReached: false,
@@ -324,22 +321,30 @@ const StopsManager = {
       );
   },
   update(worldCurrentX, playerScreenX, playerWidth) {
+    // Update activeStop for marker visuals (e.g., making the marker glow)
     this.activeStop = null;
     const playerWorldCenterX = worldCurrentX + playerScreenX + playerWidth / 2;
     for (const stop of this.stops) {
-      const distanceToStop = Math.abs(playerWorldCenterX - stop.worldPositionX);
-      if (distanceToStop < this.stopActivationRange / 2) {
+      const distanceToStopMarker = Math.abs(
+        playerWorldCenterX - stop.worldPositionX
+      );
+      if (distanceToStopMarker < this.stopActivationRange / 2) {
         this.activeStop = stop;
         break;
       }
     }
-    if (this.activeStop && Input.isInteractPressed()) {
+
+    // Handle zone-based interaction
+    const currentZone = this.getCurrentZone(worldCurrentX);
+    if (currentZone && currentZone.linkURL && Input.isInteractPressed()) {
+      // Debounce the interaction
       Config.KeyBindings.INTERACT.forEach((key) => (Input.keys[key] = false));
-      if (Config.DEBUG_MODE)
+      if (Config.DEBUG_MODE) {
         console.log(
-          `Interacting with stop: ${this.activeStop.id}, opening URL: ${this.activeStop.linkURL}`
+          `Interacting with zone: ${currentZone.name}, opening URL: ${currentZone.linkURL}`
         );
-      window.open(this.activeStop.linkURL, "_blank");
+      }
+      window.open(currentZone.linkURL, "_blank");
     }
   },
   render(ctx, worldCurrentX, playerGroundY) {
@@ -350,13 +355,20 @@ const StopsManager = {
         stopScreenX < Config.CANVAS_WIDTH + this.stopActivationRange * 2
       ) {
         const markerY = playerGroundY + stop.markerScreenYOffset;
-        const isActive = this.activeStop && this.activeStop.id === stop.id;
+        // isActive is true if the player is near this specific marker
+        const isActiveMarker =
+          this.activeStop && this.activeStop.id === stop.id;
         if (typeof stop.markerAssetFunction === "function") {
-          stop.markerAssetFunction(ctx, stopScreenX, markerY, isActive);
+          stop.markerAssetFunction(ctx, stopScreenX, markerY, isActiveMarker);
         } else {
-          StopMarkers.drawDefaultMarker(ctx, stopScreenX, markerY, isActive);
+          StopMarkers.drawDefaultMarker(
+            ctx,
+            stopScreenX,
+            markerY,
+            isActiveMarker
+          );
         }
-        if (Config.DEBUG_MODE && isActive) {
+        if (Config.DEBUG_MODE && isActiveMarker) {
           ctx.strokeStyle = "yellow";
           ctx.lineWidth = 1;
           const debugRadius = this.stopActivationRange / 2;
@@ -373,20 +385,15 @@ const StopsManager = {
       }
     });
   },
-  getActiveStopPrompt() {
-    return this.activeStop ? this.activeStop.promptText : null;
-  },
   getCurrentZone(worldCurrentX) {
     let currentZone = {
-      name: "The Wasteland", // Default starting zone name
+      name: "The Wasteland",
       theme: "desert_start",
       skyColor: Palettes.desert[4],
+      linkURL: null,
+      stopId: null,
     };
 
-    // Determine the zone entry position. This is when the transition *starts*.
-    // It's calculated as some distance *before* the actual stop marker.
-    // Original: Config.CANVAS_WIDTH * 0.75 (for stop area) + Config.CANVAS_WIDTH * 0.5 (for pre-zone buffer)
-    // This is 1.25 * Config.CANVAS_WIDTH before the stop.
     const zoneEntryLeadDistance = Config.CANVAS_WIDTH * 1.25;
 
     for (let i = this.stops.length - 1; i >= 0; i--) {
@@ -407,25 +414,27 @@ const StopsManager = {
           } Zone`,
           theme: stop.theme,
           skyColor: skyColor,
+          linkURL: stop.linkURL, // Include the link URL for the zone
+          stopId: stop.id, // Include the stop ID for reference
         };
         break;
       }
     }
 
-    // If before the first stop's zone entry point, ensure it's the starting desert theme.
     if (this.stops.length > 0) {
       const firstStop = this.stops[0];
       const firstZoneEntryPosition =
         firstStop.worldPositionX - zoneEntryLeadDistance;
       if (worldCurrentX < firstZoneEntryPosition) {
         currentZone = {
-          name: "Desert Drive", // Initial zone name before first themed area
+          name: "Desert Drive",
           theme: "desert_start",
           skyColor: Palettes.desert[4],
+          linkURL: null,
+          stopId: null,
         };
       }
     }
-
     return currentZone;
   },
 };
