@@ -193,7 +193,7 @@ class UI {
         Config.STOP_LINKS[StopsManager.activeStop.id]
       ) {
         // If near an interactive stop, prioritize its prompt
-        newTargetText = `${StopsManager.activeStop.promptText} - [F] to Enter`;
+        newTargetText = `${StopsManager.activeStop.promptText}`;
         hasInteractivePrompt = true;
       } else if (currentZone.promptText) {
         newTargetText = currentZone.promptText;
