@@ -15,18 +15,14 @@ class Game {
   init() {
     this.canvas.width = Config.CANVAS_WIDTH;
     this.canvas.height = Config.CANVAS_HEIGHT;
-    // Crucial for pixel art: disable image smoothing
     this.ctx.imageSmoothingEnabled = false;
     this.ctx.mozImageSmoothingEnabled = false;
     this.ctx.webkitImageSmoothingEnabled = false;
     this.ctx.msImageSmoothingEnabled = false;
 
     this.player = new Player(this);
-    this.world = new World(this); // World needs player for groundLevelY relative positioning
-    this.ui = new UI(this); // UI needs game for gameTime and other states
-
-    // Initialize StopsManager (already self-initializes, but good to be aware)
-    // StopsManager.init();
+    this.world = new World(this);
+    this.ui = new UI(this);
 
     if (Config.DEBUG_MODE) {
       console.log(
@@ -40,72 +36,82 @@ class Game {
   update(deltaTime) {
     this.player.update(deltaTime);
     const worldScrollSpeed = this.player.currentSpeed;
-    this.world.update(worldScrollSpeed); // World update might change theme, affecting UI
+    this.world.update(worldScrollSpeed);
     StopsManager.update(
       this.world.worldX,
       this.player.screenX,
       this.player.width,
       this
-    ); // Pass game for gameTime
-    this.ui.update(deltaTime); // UI update depends on game state (theme, active stop)
-    EffectsManager.update(deltaTime); // Update global effects like screen-wide particles
+    );
+    this.ui.update(deltaTime);
+    EffectsManager.update(deltaTime);
   }
 
   render() {
-    // Clear canvas (though world sky usually covers this)
     this.ctx.clearRect(0, 0, Config.CANVAS_WIDTH, Config.CANVAS_HEIGHT);
 
-    this.world.render(this.ctx); // Renders sky, parallax layers (except some foreground)
+    // 1. World background (sky, distant layers)
+    this.world.render(this.ctx);
 
-    const playerGroundY = this.world.groundLevelY; // Use world's ground level
+    // 2. Background weather particles (world-space)
+    this.ctx.save();
+    this.ctx.translate(-this.world.worldX, 0);
+    EffectsManager.renderLayer(this.ctx, "weather_background");
+    this.ctx.restore();
+
+    // 3. Stop markers (world-space)
     StopsManager.render(
       this.ctx,
       this.world.worldX,
-      playerGroundY,
+      this.world.groundLevelY,
       this.gameTime
     );
 
-    this.player.render(this.ctx); // Renders player and its particles (dust, exhaust)
+    // 4. Particles behind player (screen-space)
+    EffectsManager.renderLayer(this.ctx, "behind_player");
 
-    this.world.renderForeground(this.ctx); // Renders foreground elements after player
+    // 5. Player
+    this.player.render(this.ctx);
 
-    // Global screen effects before UI
-    EffectsManager.drawVignette(this.ctx); // III.2.B Vignette
-    EffectsManager.drawScanlines(this.ctx, this.world); // III.2.B Scanlines
+    // 6. World foreground layers
+    this.world.renderForeground(this.ctx);
 
-    this.ui.render(this.ctx); // Renders UI on top of everything
+    // 7. Foreground weather particles (world-space)
+    this.ctx.save();
+    this.ctx.translate(-this.world.worldX, 0);
+    EffectsManager.renderLayer(this.ctx, "weather_foreground");
+    this.ctx.restore();
 
+    // 8. Screen-wide effects
+    EffectsManager.drawVignette(this.ctx);
+    EffectsManager.drawScanlines(this.ctx, this.world);
+
+    // 9. UI
+    this.ui.render(this.ctx);
+
+    // 10. Debug Info
     if (Config.DEBUG_MODE) {
-      this.ctx.fillStyle = "white";
-      // Use UI's pixel text for debug if available, else fallback
-      if (this.ui && typeof this.ui.drawPixelText === "function") {
-        const fpsText = `FPS: ${(1 / this.deltaTime).toFixed(0)}`;
-        const gameTimeText = `GT: ${this.gameTime.toFixed(1)}s`;
-        this.ui.drawPixelText(this.ctx, fpsText, 10, 10, "white", 1.5);
-        this.ui.drawPixelText(this.ctx, gameTimeText, 10, 25, "white", 1.5);
-      } else {
-        this.ctx.font = "12px Courier New";
-        this.ctx.textAlign = "left";
-        this.ctx.fillText(`FPS: ${(1 / this.deltaTime).toFixed(0)}`, 10, 20);
-        this.ctx.fillText(`GameTime: ${this.gameTime.toFixed(2)}s`, 10, 35);
-      }
+      const fpsText = `FPS: ${(1 / this.deltaTime).toFixed(0)}`;
+      const gameTimeText = `GT: ${this.gameTime.toFixed(1)}s`;
+      const particleCount = `PC: ${EffectsManager.particles.length}`;
+      drawPixelText(this.ctx, fpsText, 10, 10, "white", 1.5);
+      drawPixelText(this.ctx, gameTimeText, 10, 25, "white", 1.5);
+      drawPixelText(this.ctx, particleCount, 10, 40, "white", 1.5);
     }
   }
 
   gameLoop(currentTime) {
-    const now = performance.now(); // Use performance.now() for higher precision
+    const now = performance.now();
     if (this.lastTime === 0) {
       this.lastTime = now;
     }
-    // Calculate deltaTime in seconds
     this.deltaTime = (now - this.lastTime) / 1000;
     this.lastTime = now;
 
     this.gameTime += this.deltaTime;
     this.frameCount++;
 
-    // Delta time clamping to prevent physics explosions on tab resume / lag spikes
-    const maxDeltaTime = (1 / Config.TARGET_FPS) * 3; // Allow up to 3 frames worth of catch-up
+    const maxDeltaTime = (1 / Config.TARGET_FPS) * 3;
     if (this.deltaTime > maxDeltaTime) {
       if (Config.DEBUG_MODE)
         console.warn(
