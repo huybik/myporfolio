@@ -24,7 +24,7 @@ class UI {
     this.infoScreenColor = "rgba(20, 40, 20, 0.9)";
     this.infoScreenBorderColor = Palettes.ui.FRAME_LIGHT;
 
-    // III.1.A Text Appearing (Info Screen)
+    // III.1.A TextAppearing (Info Screen)
     this.displayedText = "";
     this.targetText = "";
     this.typewriterIndex = 0;
@@ -312,16 +312,18 @@ class UI {
         (this.fKeyIcon.height -
           this.fontSettings.charHeight * this.fontSettings.scale) /
           2; // Align icon vertically
-      let iconPulseAlpha = 1.0;
-      if (Math.floor(this.game.gameTime * 4) % 2 === 0) {
-        // Blinking effect
-        // Pulsing size/alpha for the icon or key text
-        iconPulseAlpha =
-          0.7 + ((Math.sin(this.game.gameTime * 10) + 1) / 2) * 0.3; // 0.7 to 1.0
-      }
-      ctx.globalAlpha = iconPulseAlpha;
+
+      // Removed pulsing alpha for F-Key icon
+      // let iconPulseAlpha = 1.0;
+      // if (Math.floor(this.game.gameTime * 4) % 2 === 0) {
+      //   iconPulseAlpha =
+      //     0.7 + ((Math.sin(this.game.gameTime * 10) + 1) / 2) * 0.3;
+      // }
+      // ctx.globalAlpha = iconPulseAlpha;
+
       ctx.drawImage(this.fKeyIcon, currentX, iconY);
-      ctx.globalAlpha = 1.0;
+      // ctx.globalAlpha = 1.0; // Reset if it was changed, but now it's not.
+
       currentX +=
         this.fKeyIcon.width +
         this.fontSettings.charSpacing * this.fontSettings.scale;
