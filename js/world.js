@@ -5,7 +5,7 @@ class ParallaxLayer {
     elementCount,
     game,
     world,
-    layerConfig, // Pass the whole layerConfig object
+    layerConfig,
     isSourceLayer = false,
     initialXOffset = 0
   ) {
@@ -14,7 +14,7 @@ class ParallaxLayer {
     this.elementCount = elementCount;
     this.game = game;
     this.world = world;
-    this.layerConfig = layerConfig; // Store for options like color, sizeRange
+    this.layerConfig = layerConfig;
     this.isSourceLayer = isSourceLayer;
     this.initialXOffset = initialXOffset;
     this.elements = [];
@@ -23,11 +23,9 @@ class ParallaxLayer {
 
   generateInitialElements() {
     this.elements = [];
-    // Increased virtual width to ensure elements are available when transitioning from far off-screen
     const virtualWidth = Config.CANVAS_WIDTH * (this.isSourceLayer ? 2.5 : 3.5);
     for (let i = 0; i < this.elementCount; i++) {
       const x = this.initialXOffset + Math.random() * virtualWidth;
-      // Y generation can be more specific based on layer type
       let y;
       if (
         this.layerConfig.type &&
@@ -36,17 +34,17 @@ class ParallaxLayer {
           this.layerConfig.type.includes("stars") ||
           this.layerConfig.type.includes("nebulae"))
       ) {
-        y = getRandomFloat(0, this.world.groundLevelY * 0.6); // Sky elements higher up
+        y = getRandomFloat(0, this.world.groundLevelY * 0.6);
       } else if (this.layerConfig.type === "foreground_debris") {
         y = getRandomFloat(
           this.world.groundLevelY + 10,
           Config.CANVAS_HEIGHT - 10
         );
       } else {
-        y = Math.random() * Config.CANVAS_HEIGHT; // Original behavior
+        y = Math.random() * Config.CANVAS_HEIGHT;
       }
       this.elements.push(
-        this.elementGenerator(x, y, this.layerConfig, this.game, this.world) // Pass layerConfig
+        this.elementGenerator(x, y, this.layerConfig, this.game, this.world)
       );
     }
   }
@@ -54,33 +52,28 @@ class ParallaxLayer {
   update(worldScrollSpeed) {
     this.elements.forEach((element) => {
       element.x -= worldScrollSpeed * this.scrollSpeedFactor;
-      // Update element internal animations (like blinking lights)
       if (element.update) {
         element.update(this.game.deltaTime, this.game.gameTime);
       }
     });
 
     const screenWidth = Config.CANVAS_WIDTH;
-    const wrapBuffer = screenWidth * 0.75; // Increased buffer
+    const wrapBuffer = screenWidth * 0.75;
     const totalVirtualWidth = screenWidth * (this.isSourceLayer ? 2.5 : 3.5);
 
     if (this.isSourceLayer) {
-      // Source layers elements just scroll off and get removed
       this.elements = this.elements.filter((element) => {
         const elementVisualWidth =
           element.width || (element.radius ? element.radius * 2 : 50);
-        return element.x + elementVisualWidth > -wrapBuffer * 2; // More aggressive culling for source
+        return element.x + elementVisualWidth > -wrapBuffer * 2;
       });
     } else {
-      // Target/Normal layers wrap around
       this.elements.forEach((element) => {
         const elementVisualWidth =
           element.width || (element.radius ? element.radius * 2 : 50);
         if (worldScrollSpeed > 0) {
-          // Moving right, elements scroll left
           if (element.x + elementVisualWidth < -wrapBuffer) {
-            element.x += totalVirtualWidth + Math.random() * 100 - 50; // Add some randomness to prevent exact repetition
-            // Re-initialize y for some elements to add variety on wrap
+            element.x += totalVirtualWidth + Math.random() * 100 - 50;
             if (element.canRandomizeYOnWrap) {
               if (
                 this.layerConfig.type &&
@@ -95,15 +88,10 @@ class ParallaxLayer {
                   this.world.groundLevelY + 10,
                   Config.CANVAS_HEIGHT - 10
                 );
-              } else {
-                // For other types, might need specific Y ranges based on their original generation logic
-                // For now, let's keep their Y or re-randomize within a general band if appropriate
-                // element.y = Math.random() * Config.CANVAS_HEIGHT; // Could be too broad
               }
             }
           }
         } else if (worldScrollSpeed < 0) {
-          // Moving left, elements scroll right
           if (element.x > screenWidth + wrapBuffer) {
             element.x -= totalVirtualWidth + Math.random() * 100 - 50;
             if (element.canRandomizeYOnWrap) {
@@ -120,8 +108,6 @@ class ParallaxLayer {
                   this.world.groundLevelY + 10,
                   Config.CANVAS_HEIGHT - 10
                 );
-              } else {
-                // element.y = Math.random() * Config.CANVAS_HEIGHT;
               }
             }
           }
@@ -131,7 +117,7 @@ class ParallaxLayer {
   }
 
   render(ctx) {
-    const renderBuffer = 200; // Increased render buffer
+    const renderBuffer = 200;
     this.elements.forEach((element) => {
       const elementVisualWidth =
         element.width || (element.radius ? element.radius * 2 : 50);
@@ -139,14 +125,11 @@ class ParallaxLayer {
         element.x + elementVisualWidth > -renderBuffer &&
         element.x < Config.CANVAS_WIDTH + renderBuffer
       ) {
-        // III.2.A Alpha Fading for Elements during transition
         let elementAlpha = 1.0;
         if (this.world.isTransitioning) {
           if (this.isSourceLayer) {
-            // Fading out
             elementAlpha = 1.0 - this.world.transitionProgress;
           } else {
-            // Fading in (only if this layer belongs to target theme)
             if (
               this.world.targetLayers &&
               this.world.targetLayers.includes(this)
@@ -156,22 +139,18 @@ class ParallaxLayer {
               this.world.sourceLayers &&
               !this.world.sourceLayers.includes(this)
             ) {
-              // If it's not a source layer and not yet a target layer (e.g. persistent layer), keep full alpha
               elementAlpha = 1.0;
             } else if (!this.world.sourceLayers) {
-              // If sourceLayers is null (e.g. initial state, not transitioning)
               elementAlpha = 1.0;
             } else {
-              // This case should ideally not happen if logic is correct
-              elementAlpha = 0; // Default to fade out if unsure
+              elementAlpha = 0;
             }
           }
         }
         elementAlpha = Math.max(0, Math.min(1, elementAlpha));
         const originalCtxAlpha = ctx.globalAlpha;
-        ctx.globalAlpha *= elementAlpha; // Multiply with current alpha for nested effects
+        ctx.globalAlpha *= elementAlpha;
 
-        // I.2.C Atmospheric Perspective/Tinting
         const activeTheme = this.world.isTransitioning
           ? this.world.transitionTargetTheme
           : this.world.currentTheme;
@@ -187,7 +166,6 @@ class ParallaxLayer {
             "#ABCDEF";
 
           if (finalColor && typeof finalColor === "string") {
-            // Check finalColor before using
             finalColor = interpolateColor(
               finalColor,
               skyHorizonColor,
@@ -197,22 +175,24 @@ class ParallaxLayer {
               finalColor = desaturateColor(finalColor, tintFactor * 0.5);
             }
           } else if (typeof finalColor !== "string") {
-            // console.warn("Atmospheric perspective: finalColor is not a string for element", element, "color:", finalColor);
-            finalColor = "#FF00FF"; // Fallback for non-string colors
+            finalColor = "#FF00FF";
           }
           element.tempColor = finalColor;
         } else {
           element.tempColor = finalColor;
         }
 
-        this.world.drawElement(
-          ctx,
-          element,
-          this.game.gameTime,
-          this.scrollSpeedFactor
-        );
+        if (ctx.globalAlpha > 0.01) {
+          // Optimization: don't draw if fully transparent
+          this.world.drawElement(
+            ctx,
+            element,
+            this.game.gameTime,
+            this.scrollSpeedFactor
+          );
+        }
 
-        ctx.globalAlpha = originalCtxAlpha; // Reset alpha
+        ctx.globalAlpha = originalCtxAlpha;
       }
     });
   }
@@ -223,11 +203,11 @@ class World {
     this.game = game;
     this.layers = [];
     this.worldX = 0;
-    this.groundLevelY = Config.CANVAS_HEIGHT - 80; // Adjusted ground level
+    this.groundLevelY = Config.CANVAS_HEIGHT - 80;
 
-    this.currentTheme = "desert_start"; // Initial theme
+    this.currentTheme = "desert_start";
     const initialPalette = Palettes[this.currentTheme] || Palettes.desert;
-    this.skyColor = (initialPalette.sky && initialPalette.sky[0]) || "#FAD7A0"; // Top sky color
+    this.skyColor = (initialPalette.sky && initialPalette.sky[0]) || "#FAD7A0";
     this.currentTopSky = this.skyColor;
     this.currentHorizonSky =
       (initialPalette.sky && initialPalette.sky[1]) ||
@@ -235,7 +215,7 @@ class World {
 
     this.isTransitioning = false;
     this.transitionProgress = 0;
-    this.transitionDurationWorldUnits = Config.CANVAS_WIDTH * 1.1; // Slightly longer transition
+    this.transitionDurationWorldUnits = Config.CANVAS_WIDTH * 1.1;
 
     this.transitionSourceSky = this.skyColor;
     this.transitionTargetSky = this.skyColor;
@@ -247,14 +227,12 @@ class World {
 
     this.layers = this.initLayers(this.currentTheme);
 
-    // II.4.A Dynamic Environmental Effects
     this.weatherParticles = [];
-    this.maxWeatherParticles = 100; // e.g., for rain/snow
+    this.maxWeatherParticles = 100;
 
     if (Config.DEBUG_MODE) console.log("World initialized.");
   }
 
-  // II.1 & II.2 Layer Configurations
   static layerConfigs = {
     desert_start: [
       {
@@ -323,7 +301,7 @@ class World {
         count: 100,
         generator: World.generateStar,
         options: { colors: ["#FF00FF", "#00FFFF"], sizes: [1, 1] },
-      }, // Themed stars
+      },
       {
         type: "celestial",
         speed: 0.04,
@@ -488,19 +466,22 @@ class World {
     ],
   };
 
-  static getGenerator(theme, type) {
-    // Helper to find generator, can be expanded if layerConfigs don't directly store func
-    const themeConfig = World.layerConfigs[theme];
-    if (themeConfig) {
-      const layerInfo = themeConfig.find((lc) => lc.type === type);
-      if (layerInfo) return layerInfo.generator;
+  static getSideColor(objectPalette, sideType) {
+    // sideType: "base", "light", "shadow"
+    if (!objectPalette || typeof objectPalette !== "object") {
+      // console.warn("getSideColor: Invalid objectPalette provided.", objectPalette);
+      return "#FF00FF"; // Magenta fallback for error
     }
-    // Fallback or error
-    // console.warn(`Generator not found for theme: ${theme}, type: ${type}. Falling back to desert distant.`);
-    return World.generateDesertDistant;
+    switch (sideType) {
+      case "light":
+        return objectPalette.light || objectPalette.base || "#FFFFFF";
+      case "shadow":
+        return objectPalette.shadow || objectPalette.base || "#000000";
+      case "base":
+      default:
+        return objectPalette.base || "#808080";
+    }
   }
-
-  // --- Element Generators --- (now take layerConfig as third param)
 
   static generateStar(x, y, layerConfig, game, world) {
     const options = layerConfig.options || {};
@@ -511,20 +492,20 @@ class World {
     return {
       type: "star",
       x: x,
-      y: y, // Y is set higher up during layer generation
+      y: y,
       size: size,
       color: starColor,
       initialBrightness: getRandomFloat(0.5, 1.0),
       blinkRate: getRandomFloat(1, 5),
       blinkPhase: getRandomFloat(0, Math.PI * 2),
-      originalColor: starColor, // For tinting
+      originalColor: starColor,
       canRandomizeYOnWrap: true,
     };
   }
 
   static generateCelestialBody(x, y, layerConfig, game, world) {
     const options = layerConfig.options || {};
-    const type = options.type || "sun"; // sun, moon, tech_moon, glitch_moon
+    const type = options.type || "sun";
     let radius, color, glowColor;
 
     switch (type) {
@@ -553,14 +534,14 @@ class World {
     return {
       type: "celestial_body",
       x: x,
-      y: y, // Y is set higher up
+      y: y,
       radius: radius,
       color: color,
       glowColor: glowColor,
-      celestialType: type, // Store for specific drawing logic
+      celestialType: type,
       originalColor: color,
-      isEmissive: true, // Don't apply atmospheric tint
-      canRandomizeYOnWrap: false, // Keep sun/moon at consistent height relative to layer
+      isEmissive: true,
+      canRandomizeYOnWrap: false,
     };
   }
 
@@ -569,7 +550,7 @@ class World {
     const sizeRange = options.sizeRange || [20, 50];
     const cloudWidth = getRandomInt(sizeRange[0], sizeRange[1]);
     const cloudHeight = getRandomInt(sizeRange[0] * 0.4, sizeRange[1] * 0.7);
-    const yPosRange = options.yPosRange || [0.05, 0.4]; // Percentage of sky height
+    const yPosRange = options.yPosRange || [0.05, 0.4];
     const cloudColors = options.colors || ["#FFFFFF", "#DDDDFF"];
 
     return {
@@ -596,7 +577,7 @@ class World {
     return {
       type: "nebula",
       x: x,
-      y: y, // Y is set higher up
+      y: y,
       width: getRandomInt(200, 400),
       height: getRandomInt(100, 250),
       colors: nebulaColors,
@@ -612,16 +593,16 @@ class World {
     const heightRange = options.heightRange || [50, 100];
     const width = getRandomInt(30, 70);
     const height = getRandomInt(heightRange[0], heightRange[1]);
-    const color = options.colorBase || Palettes.desert.objects_primary.shadow; // Use the object property
+    const color = options.colorBase || Palettes.desert.objects_primary.shadow;
     return {
-      type: "rect_simple_mountain", // More specific type
+      type: "rect_simple_mountain",
       x: x,
-      y: world.groundLevelY - height - getRandomInt(10, 40), // Ensure they sit on horizon
+      y: world.groundLevelY - height - getRandomInt(10, 40),
       width: width,
       height: height,
       color: color,
       originalColor: color,
-      canRandomizeYOnWrap: false, // Keep mountains on horizon
+      canRandomizeYOnWrap: false,
     };
   }
 
@@ -639,16 +620,10 @@ class World {
         y: world.groundLevelY - mesaHeight - getRandomInt(0, 20),
         width: mesaWidth,
         height: mesaHeight,
-        colors: {
-          // This is an object, not an array
-          top: Palettes.desert.objects_primary.light,
-          middle: Palettes.desert.objects_primary.base,
-          bottom: Palettes.desert.objects_primary.shadow,
-        },
+        colors: Palettes.desert.objects_primary, // Pass the whole object
         originalColor: Palettes.desert.objects_primary.base,
       };
     } else if (options.type === "mixed" && r < 0.8) {
-      // Cactus
       const cactusHeight = getRandomInt(20, 60);
       element = {
         type: "cactus",
@@ -660,7 +635,6 @@ class World {
         originalColor: Palettes.desert.objects_primary.base,
       };
     } else {
-      // Rock Pile
       const rockSize = getRandomInt(15, 35);
       element = {
         type: "rock_pile",
@@ -670,16 +644,15 @@ class World {
         colors: [
           Palettes.desert.objects_primary.base,
           Palettes.desert.objects_primary.shadow,
-        ], // This is an array for getRandomColor
+        ],
         originalColor: Palettes.desert.objects_primary.base,
       };
     }
-    element.canRandomizeYOnWrap = false; // Mid-ground elements usually fixed relative to ground
+    element.canRandomizeYOnWrap = false;
     return element;
   }
 
   static generateDesertGround(x, y, layerConfig, game, world) {
-    // Procedural Textures for ground
     const baseColor = Palettes.desert.ground[0];
     const detailColors = [Palettes.desert.ground[2], Palettes.desert.ground[3]];
     const segmentWidth = Config.CANVAS_WIDTH * 0.5 + getRandomInt(0, 20);
@@ -688,7 +661,7 @@ class World {
       x: x,
       y: world.groundLevelY,
       width: segmentWidth,
-      height: Config.CANVAS_HEIGHT - world.groundLevelY, // Fill to bottom
+      height: Config.CANVAS_HEIGHT - world.groundLevelY,
       baseColor: baseColor,
       detailColors: detailColors,
       textureType: "desert_cracks_pebbles",
@@ -697,19 +670,18 @@ class World {
     };
   }
 
-  // II.3.C Foreground Debris Layer
   static generateForegroundDebris(x, y, layerConfig, game, world) {
     const options = layerConfig.options || { types: ["rock"] };
-    const type = getRandomColor(options.types); // options.types should be an array
+    const type = getRandomColor(options.types);
     let element = {
       type: "debris",
       x: x,
-      y: y, // Y is set by layer generator to be low on screen
+      y: y,
       size: getRandomInt(3, 8),
-      color: "#000000", // Default, will be overridden
+      color: "#000000",
       debrisType: type,
       originalColor: "#000000",
-      canRandomizeYOnWrap: true, // Debris can appear at different foreground Y levels
+      canRandomizeYOnWrap: true,
     };
 
     switch (type) {
@@ -729,8 +701,8 @@ class World {
         break;
       case "wire":
         element.color = Palettes.gaming.objects_primary.shadow;
-        element.size = getRandomInt(10, 20); // Length
-        element.height = getRandomInt(1, 2); // Thickness
+        element.size = getRandomInt(10, 20);
+        element.height = getRandomInt(1, 2);
         break;
       case "metal_shard":
         element.color = Palettes.futuristic.objects_primary.base;
@@ -744,8 +716,8 @@ class World {
         break;
       case "rusty_pipe_fragment":
         element.color = getRandomColor(Palettes.industrial.objects_accent);
-        element.size = getRandomInt(10, 18); // Length
-        element.height = getRandomInt(3, 5); // Thickness
+        element.size = getRandomInt(10, 18);
+        element.height = getRandomInt(3, 5);
         break;
     }
     element.originalColor = element.color;
@@ -756,7 +728,6 @@ class World {
     const r = Math.random();
     let element;
     if (r < 0.5) {
-      // Tall pixel structure
       const width = getRandomInt(30, 60);
       const height = getRandomInt(80, Config.CANVAS_HEIGHT * 0.5);
       element = {
@@ -765,12 +736,11 @@ class World {
         y: world.groundLevelY - height - getRandomInt(10, 30),
         width: width,
         height: height,
-        colors: Palettes.gaming.objects_primary, // This is an object {base, light, shadow}
+        colors: Palettes.gaming.objects_primary,
         density: 0.6,
         originalColor: Palettes.gaming.objects_primary.base,
       };
     } else {
-      // Floating island type
       const width = getRandomInt(50, 100);
       const height = getRandomInt(20, 40);
       element = {
@@ -780,9 +750,8 @@ class World {
         width: width,
         height: height,
         colors: {
-          // This is an object
           top: Palettes.gaming.ground[2],
-          bottom: Palettes.gaming.ground[3], // Ensure this is ground[3], not objects_primary.shadow
+          bottom: Palettes.gaming.ground[3],
         },
         originalColor: Palettes.gaming.ground[2],
       };
@@ -795,7 +764,6 @@ class World {
     const r = Math.random();
     let element;
     if (r < 0.4) {
-      // Pixel Tree
       const trunkHeight = getRandomInt(10, 25);
       const leavesHeight = getRandomInt(20, 40);
       const leavesWidth = getRandomInt(15, 35);
@@ -805,13 +773,12 @@ class World {
         y: world.groundLevelY - trunkHeight - leavesHeight,
         trunkWidth: getRandomInt(4, 8),
         trunkHeight: trunkHeight,
-        trunkColor: Palettes.desert.objects_accent[0], // Brown trunk
-        leavesColor: Palettes.gaming.ground[0], // Green leaves
+        trunkColor: Palettes.desert.objects_accent[0],
+        leavesColor: Palettes.gaming.ground[0],
         leavesHighlight: Palettes.gaming.ground[2],
         originalColor: Palettes.gaming.ground[0],
       };
     } else if (r < 0.7) {
-      // Giant Mushroom
       const stemHeight = getRandomInt(15, 30);
       const capRadius = getRandomInt(10, 25);
       element = {
@@ -822,28 +789,25 @@ class World {
         stemWidth: getRandomInt(5, 10),
         capRadius: capRadius,
         colors: {
-          // Object
           stem: Palettes.gaming.objects_primary.light,
-          capTop: getRandomColor(Palettes.gaming.props), // props is an array
-          capSpots: getRandomColor(Palettes.gaming.emissive), // emissive is an array
+          capTop: getRandomColor(Palettes.gaming.props),
+          capSpots: getRandomColor(Palettes.gaming.emissive),
         },
         originalColor: getRandomColor(Palettes.gaming.props),
       };
     } else {
-      // Power Up Box
       const size = getRandomInt(10, 20);
       element = {
         type: "power_up_box",
         x: x,
-        y: world.groundLevelY - size - getRandomInt(0, 10), // Can float slightly
+        y: world.groundLevelY - size - getRandomInt(0, 10),
         size: size,
         colors: {
-          // Object
-          box: getRandomColor(Palettes.gaming.objects_accent), // objects_accent is an array
+          box: getRandomColor(Palettes.gaming.objects_accent),
           symbol: Palettes.gaming.emissive[0],
         },
         originalColor: getRandomColor(Palettes.gaming.objects_accent),
-        isEmissive: true, // The symbol part
+        isEmissive: true,
       };
     }
     element.canRandomizeYOnWrap = false;
@@ -874,7 +838,7 @@ class World {
   static generateFuturisticSkyElement(x, y, layerConfig, game, world) {
     const width = getRandomInt(20, 100);
     const height = getRandomInt(2, 5);
-    const color = getRandomColor(Palettes.futuristic.emissive) + "66"; // Semi-transparent
+    const color = getRandomColor(Palettes.futuristic.emissive) + "66";
     return {
       type: "rect",
       x,
@@ -896,8 +860,8 @@ class World {
       y: world.groundLevelY - buildingHeight,
       width: buildingWidth,
       height: buildingHeight,
-      colors: Palettes.futuristic.objects_primary, // This is an object {base, light, shadow}
-      lightColors: Palettes.futuristic.emissive, // This is an array
+      colors: Palettes.futuristic.objects_primary,
+      lightColors: Palettes.futuristic.emissive,
       originalColor: Palettes.futuristic.objects_primary.base,
       canRandomizeYOnWrap: false,
     };
@@ -906,13 +870,12 @@ class World {
     const platWidth = getRandomInt(50, 120);
     const platHeight = getRandomInt(10, 25);
     return {
-      type: "rect_platform", // Specific type
+      type: "rect_platform",
       x: x,
       y: world.groundLevelY - platHeight - getRandomInt(10, 80),
       width: platWidth,
       height: platHeight,
       colors: {
-        // Object
         base: Palettes.futuristic.objects_primary.base,
         trim: Palettes.futuristic.emissive[0],
       },
@@ -928,11 +891,11 @@ class World {
     const baseColor =
       Palettes.futuristic.ground[
         colorIndex === 0 ? 0 : colorIndex === 1 ? 1 : 0
-      ]; // Alternate two base ground colors
+      ];
     const detailColors = [
       Palettes.futuristic.ground[2],
       Palettes.futuristic.emissive[0],
-    ]; // Lines and emissive bits
+    ];
     return {
       type: "textured_ground_rect",
       x: x,
@@ -960,9 +923,9 @@ class World {
       y: world.groundLevelY - buildingHeight,
       width: buildingWidth,
       height: buildingHeight,
-      colors: Palettes.industrial.objects_primary, // This is an object {base, light, shadow}
-      accentColors: Palettes.industrial.objects_accent, // Rust, etc. (array)
-      smokeColors: Palettes.industrial.smoke, // (array)
+      colors: Palettes.industrial.objects_primary,
+      accentColors: Palettes.industrial.objects_accent,
+      smokeColors: Palettes.industrial.smoke,
       originalColor: Palettes.industrial.objects_primary.base,
       canRandomizeYOnWrap: false,
     };
@@ -970,11 +933,10 @@ class World {
   static generateIndustrialMid(x, y, layerConfig, game, world) {
     const r = Math.random();
     let element;
-    let originalCrateColor = getRandomColor(Palettes.industrial.objects_accent); // objects_accent is an array
+    let originalCrateColor = getRandomColor(Palettes.industrial.objects_accent);
     let originalPipeColor = Palettes.industrial.objects_primary.shadow;
 
     if (r < 0.5) {
-      // Crates/Barrels
       const size = getRandomInt(15, 30);
       element = {
         type: "rect_crates",
@@ -986,7 +948,6 @@ class World {
         originalColor: originalCrateColor,
       };
     } else {
-      // Pipes
       const length = getRandomInt(40, 100);
       const thickness = getRandomInt(8, 15);
       element = {
@@ -1005,14 +966,13 @@ class World {
   static generateIndustrialGround(x, y, layerConfig, game, world) {
     const r = Math.random();
     let baseColor;
-    if (r < 0.6) baseColor = Palettes.industrial.ground[0]; // Dark grey asphalt
-    else if (r < 0.8)
-      baseColor = Palettes.industrial.ground[1]; // Lighter concrete
-    else baseColor = Palettes.industrial.objects_accent[1]; // Patches of dirt/rust
+    if (r < 0.6) baseColor = Palettes.industrial.ground[0];
+    else if (r < 0.8) baseColor = Palettes.industrial.ground[1];
+    else baseColor = Palettes.industrial.objects_accent[1];
     const detailColors = [
       Palettes.industrial.ground[3],
       Palettes.industrial.objects_accent[0],
-    ]; // Cracks, rust stains
+    ];
     return {
       type: "textured_ground_rect",
       x: x,
@@ -1027,7 +987,6 @@ class World {
     };
   }
 
-  // --- DrawElement ---
   drawElement(ctx, element, gameTime, scrollSpeedFactor = 1.0) {
     const drawColor = element.tempColor || element.color || "#FF00FF";
 
@@ -1057,7 +1016,7 @@ class World {
         drawColor
       );
     } else if (element.type === "star") {
-      const currentAlpha = ctx.globalAlpha; // Preserve current alpha from layer transition
+      const currentAlpha = ctx.globalAlpha;
       const blinkFactor =
         (Math.sin(gameTime * element.blinkRate + element.blinkPhase) + 1) / 2;
       ctx.globalAlpha *= element.initialBrightness * blinkFactor;
@@ -1069,7 +1028,7 @@ class World {
         element.size,
         drawColor
       );
-      ctx.globalAlpha = currentAlpha; // Restore alpha
+      ctx.globalAlpha = currentAlpha;
     } else if (element.type === "celestial_body") {
       const currentAlpha = ctx.globalAlpha;
       ctx.globalAlpha *= 0.5;
@@ -1081,7 +1040,7 @@ class World {
         element.radius * 2.4,
         element.glowColor
       );
-      ctx.globalAlpha = currentAlpha; // Restore for main body
+      ctx.globalAlpha = currentAlpha;
       drawPixelRect(
         ctx,
         element.x - element.radius,
@@ -1107,17 +1066,29 @@ class World {
           element.radius * 1.6,
           lightenDarkenColor(drawColor, -30)
         );
+        // Add small blinking lights
+        if (Math.floor(gameTime * 3) % 2 === 0) {
+          drawPixelRect(
+            ctx,
+            element.x + getRandomFloat(-1, 1) * element.radius * 0.7,
+            drawY + getRandomFloat(-1, 1) * element.radius * 0.7,
+            2,
+            2,
+            Palettes.futuristic.emissive[1]
+          );
+        }
       } else if (
         element.celestialType === "glitch_moon" &&
         Math.floor(gameTime * 10) % 3 === 0
       ) {
+        const glitchColor = getRandomColor(Palettes.gaming.emissive);
         drawPixelRect(
           ctx,
-          element.x - element.radius + getRandomInt(-3, 3),
-          drawY - element.radius + getRandomInt(-3, 3),
-          element.radius * 2,
-          element.radius * 2,
-          getRandomColor(Palettes.gaming.emissive)
+          element.x - element.radius + getRandomInt(-5, 5),
+          drawY - element.radius + getRandomInt(-5, 5),
+          element.radius * 2 + getRandomInt(-2, 2),
+          element.radius * 2 + getRandomInt(-2, 2),
+          glitchColor
         );
       }
     } else if (element.type === "pixelCloud") {
@@ -1159,7 +1130,7 @@ class World {
           getRandomColor(element.colors)
         );
       }
-      ctx.globalAlpha = currentAlpha; // Restore
+      ctx.globalAlpha = currentAlpha;
     } else if (element.type === "rect_simple_mountain") {
       drawPixelRect(
         ctx,
@@ -1187,13 +1158,14 @@ class World {
       );
     } else if (element.type === "mesa") {
       const hThird = element.height / 3;
+      // Use getSideColor for mesa parts if applicable, or direct from element.colors
       drawPixelRect(
         ctx,
         element.x,
         drawY,
         element.width,
         hThird,
-        element.colors.top
+        element.colors.light || element.colors.top
       );
       drawPixelRect(
         ctx,
@@ -1201,7 +1173,7 @@ class World {
         drawY + hThird,
         element.width,
         hThird,
-        element.colors.middle
+        element.colors.base || element.colors.middle
       );
       drawPixelRect(
         ctx,
@@ -1209,7 +1181,7 @@ class World {
         drawY + hThird * 2,
         element.width,
         hThird,
-        element.colors.bottom
+        element.colors.shadow || element.colors.bottom
       );
       for (let i = 0; i < 5; i++) {
         const lineX = element.x + getRandomInt(5, element.width - 5);
@@ -1219,7 +1191,7 @@ class World {
           drawY + hThird,
           1,
           hThird * 2,
-          lightenDarkenColor(element.colors.middle, -20)
+          lightenDarkenColor(element.colors.base || element.colors.middle, -20)
         );
       }
     } else if (element.type === "cactus") {
@@ -1281,6 +1253,8 @@ class World {
         const detailX = element.x + Math.random() * element.width;
         const detailY = drawY + Math.random() * element.height * 0.3;
         let dW, dH;
+        let detailColor = getRandomColor(element.detailColors);
+
         if (element.textureType === "desert_cracks_pebbles") {
           dW = Math.random() < 0.5 ? getRandomInt(5, 15) : getRandomInt(1, 3);
           dH = Math.random() < 0.5 ? getRandomInt(1, 3) : getRandomInt(5, 15);
@@ -1288,23 +1262,37 @@ class World {
           dW = getRandomInt(2, 4);
           dH = getRandomInt(2, 4);
         } else if (element.textureType === "futuristic_guideways") {
-          dW = Math.random() < 0.7 ? element.width * 0.8 : getRandomInt(3, 6);
+          dW =
+            Math.random() < 0.7
+              ? element.width * getRandomFloat(0.3, 0.8)
+              : getRandomInt(3, 6);
           dH = Math.random() < 0.7 ? getRandomInt(1, 2) : getRandomInt(3, 6);
+          if (dH === 1 || dH === 2)
+            detailColor = Palettes.futuristic.emissive[0]; // Emissive lines
         } else if (element.textureType === "industrial_asphalt_cracks") {
           dW = Math.random() < 0.5 ? getRandomInt(10, 30) : getRandomInt(2, 5);
           dH = Math.random() < 0.5 ? getRandomInt(1, 3) : getRandomInt(2, 5);
+          // Lane markings for asphalt
+          const laneMarkingY = drawY + element.height * 0.15; // Position lines near top of ground segment
+          const segmentScrollX = element.x + this.worldX * scrollSpeedFactor;
+          const dashLength = 30;
+          const gapLength = 20;
+          if (Math.floor(segmentScrollX / (dashLength + gapLength)) % 2 === 0) {
+            // Dashed line
+            drawPixelRect(
+              ctx,
+              element.x,
+              laneMarkingY,
+              element.width,
+              2,
+              "#FFFF00"
+            ); // Simplified: full width yellow line for effect
+          }
         } else {
           dW = getRandomInt(2, 8);
           dH = getRandomInt(2, 8);
         }
-        drawPixelRect(
-          ctx,
-          detailX,
-          detailY,
-          dW,
-          dH,
-          getRandomColor(element.detailColors)
-        );
+        drawPixelRect(ctx, detailX, detailY, dW, dH, detailColor);
       }
     } else if (element.type === "debris") {
       if (
@@ -1331,7 +1319,7 @@ class World {
       }
     } else if (element.type === "pixelStructure") {
       const structBlockSize = Math.max(3, Math.floor(element.width / 10));
-      const Ecolors = element.colors; // element.colors is an object {base, light, shadow}
+      const objPalette = element.colors; // This is Palettes.gaming.objects_primary
       for (let i = 0; i < element.width / structBlockSize; i++) {
         for (let j = 0; j < element.height / structBlockSize; j++) {
           if (
@@ -1339,11 +1327,11 @@ class World {
             element.height - j * structBlockSize >
               Math.random() * element.height * 0.5
           ) {
-            let blockColor = Ecolors.base;
+            let blockColor = World.getSideColor(objPalette, "base");
             if (i < element.width / structBlockSize / 3)
-              blockColor = Ecolors.shadow;
+              blockColor = World.getSideColor(objPalette, "shadow");
             else if (i > ((element.width / structBlockSize) * 2) / 3)
-              blockColor = Ecolors.light;
+              blockColor = World.getSideColor(objPalette, "light");
 
             const activeThemeForLights = this.isTransitioning
               ? this.transitionTargetTheme
@@ -1493,10 +1481,10 @@ class World {
         );
       }
     } else if (element.type === "futuristicTower") {
-      const Ecolors = element.colors; // element.colors is Palettes.futuristic.objects_primary
-      const baseC = Ecolors.base;
-      const lightC = Ecolors.light;
-      const shadowC = Ecolors.shadow;
+      const objPalette = element.colors;
+      const baseC = World.getSideColor(objPalette, "base");
+      const lightC = World.getSideColor(objPalette, "light");
+      const shadowC = World.getSideColor(objPalette, "shadow");
 
       drawPixelRect(
         ctx,
@@ -1538,7 +1526,7 @@ class World {
               element.height * 0.1,
               element.height * 0.9 - 1
             ),
-            color: getRandomColor(element.lightColors), // element.lightColors is an array
+            color: getRandomColor(element.lightColors),
             blinkRate: getRandomFloat(1, 4),
             blinkPhase: getRandomFloat(0, Math.PI * 2),
           });
@@ -1596,10 +1584,10 @@ class World {
       element.type === "industrialBuilding" ||
       element.type === "industrialSmokestack"
     ) {
-      const Ecolors = element.colors; // element.colors is Palettes.industrial.objects_primary
-      const baseC = Ecolors.base;
-      const lightC = Ecolors.light;
-      const shadowC = Ecolors.shadow;
+      const objPalette = element.colors;
+      const baseC = World.getSideColor(objPalette, "base");
+      const lightC = World.getSideColor(objPalette, "light");
+      const shadowC = World.getSideColor(objPalette, "shadow");
 
       drawPixelRect(
         ctx,
@@ -1762,7 +1750,7 @@ class World {
     ) {
       const currentPalette = Palettes[this.currentTheme] || Palettes.desert;
       this.skyColor =
-        (currentPalette.sky && currentPalette.sky[0]) || this.skyColor; // Update current top sky color
+        (currentPalette.sky && currentPalette.sky[0]) || this.skyColor;
       this.currentTopSky = this.skyColor;
       this.currentHorizonSky =
         (currentPalette.sky && currentPalette.sky[1]) ||
@@ -1855,13 +1843,13 @@ class World {
         Palettes[this.transitionTargetTheme] || Palettes.desert;
 
       const sourceTop =
-        (sourcePalette.sky && sourcePalette.sky[0]) || this.transitionSourceSky; // Use transitionSourceSky as fallback
+        (sourcePalette.sky && sourcePalette.sky[0]) || this.transitionSourceSky;
       const sourceHorizon =
         (sourcePalette.sky && sourcePalette.sky[1]) ||
         lightenDarkenColor(sourceTop, 30);
 
       const targetTop =
-        (targetPalette.sky && targetPalette.sky[0]) || this.transitionTargetSky; // Use transitionTargetSky as fallback
+        (targetPalette.sky && targetPalette.sky[0]) || this.transitionTargetSky;
       const targetHorizon =
         (targetPalette.sky && targetPalette.sky[1]) ||
         lightenDarkenColor(targetTop, 30);
@@ -1926,18 +1914,17 @@ class World {
       themePalette.atmosphere.fogColor !== "rgba(0,0,0,0.0)"
     ) {
       const originalAlpha = ctx.globalAlpha;
-      // Apply fog with its own alpha, don't multiply if it's already rgba
       if (
         typeof themePalette.atmosphere.fogColor === "string" &&
         themePalette.atmosphere.fogColor.includes("rgba")
       ) {
         ctx.fillStyle = themePalette.atmosphere.fogColor;
       } else {
-        ctx.globalAlpha = 0.15; // Default alpha for non-rgba fog colors
-        ctx.fillStyle = themePalette.atmosphere.fogColor || "#FFFFFF"; // Fallback color
+        ctx.globalAlpha = 0.15;
+        ctx.fillStyle = themePalette.atmosphere.fogColor || "#FFFFFF";
       }
       ctx.fillRect(0, 0, Config.CANVAS_WIDTH, Config.CANVAS_HEIGHT);
-      ctx.globalAlpha = originalAlpha; // Reset alpha
+      ctx.globalAlpha = originalAlpha;
     }
 
     const layersToRender = this.isTransitioning
