@@ -8,5 +8,5 @@ const Config = {
     MOVE_RIGHT: ["ArrowRight", "d", "D"],
     INTERACT: ["Enter", " ", "f", "F"],
   },
-  DEBUG_MODE: true,
+  DEBUG_MODE: false,
 };

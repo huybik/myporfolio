@@ -13,7 +13,7 @@ class Player {
     this.wheelAnimationSpeed = 0.2;
     this.wheelRadius = 8;
     this.currentSpeed = 0;
-    this.maxSpeed = 5;
+    this.maxSpeed = 7; // Changed from 5 to 7
     this.acceleration = 0.1;
     this.deceleration = 0.05;
     this.effectiveY = this.screenY;
