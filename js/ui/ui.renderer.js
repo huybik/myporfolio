@@ -79,6 +79,24 @@ const UIRenderer = {
     return canvas;
   },
 
+  drawRightArrow(ctx, x, y, size, color) {
+    const s = Math.max(1, Math.floor(size / 6));
+    const shaftWidth = s * 3;
+    const shaftHeight = s * 2;
+
+    // shaft
+    drawPixelRect(ctx, x, y - shaftHeight / 2, shaftWidth, shaftHeight, color);
+
+    // head
+    const headStartX = x + shaftWidth;
+    // Base of the arrow head (tallest part)
+    drawPixelRect(ctx, headStartX, y - s * 3, s, s * 6, color);
+    // Middle part
+    drawPixelRect(ctx, headStartX + s, y - s * 2, s, s * 4, color);
+    // Tip (pointy part)
+    drawPixelRect(ctx, headStartX + s * 2, y - s, s, s * 2, color);
+  },
+
   // I.1.C UI Icons: Status Lights
   drawStatusLights(ctx, ui, panelY) {
     const lightSize = 8 * ui.fontSettings.scale;

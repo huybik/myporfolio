@@ -31,10 +31,17 @@ class UI {
 
     this.fKeyIcon = UIRenderer.createFKeyIcon(this.fontSettings);
 
+    this.showDriveInstruction = true; // To control visibility of the initial instruction
+
     if (Config.DEBUG_MODE) console.log("UI initialized.");
   }
 
   update(deltaTime) {
+    // Hide the initial drive instruction once the player moves right
+    if (this.showDriveInstruction && Input.isMoveRightPressed()) {
+      this.showDriveInstruction = false;
+    }
+
     if (this.panelYOffset > 0) {
       this.panelYOffset -= this.panelIntroSpeed * (60 * deltaTime);
       if (this.panelYOffset < 0) this.panelYOffset = 0;
@@ -73,6 +80,44 @@ class UI {
     } else {
       this.displayedText = this.targetText;
     }
+  }
+
+  renderDriveInstruction(ctx) {
+    const animOffset = ((Math.sin(this.game.gameTime * 6) + 1) / 2) * 8;
+    const alpha = 0.75 + ((Math.sin(this.game.gameTime * 6) + 1) / 2) * 0.25;
+    ctx.globalAlpha = alpha;
+
+    const text = "USE RIGHT ARROW TO DRIVE";
+    const textScale = 3;
+
+    // Accurate text width calculation
+    let textWidth = 0;
+    for (let char of text.toUpperCase()) {
+      const charData = PixelFontData[char] || PixelFontData["?"];
+      textWidth +=
+        (charData[0] ? charData[0].length : PixelFontData.DEFAULT_CHAR_WIDTH) *
+        textScale;
+      textWidth += PixelFontData.fontSettings.charSpacing * textScale;
+    }
+    textWidth -= PixelFontData.fontSettings.charSpacing * textScale;
+
+    const arrowSize = 30;
+    const padding = 20;
+
+    const totalWidth = textWidth + padding + arrowSize;
+    const startX = Config.CANVAS_WIDTH - totalWidth - 60;
+    const startY = Config.CANVAS_HEIGHT / 2 - 50;
+
+    const textY =
+      startY +
+      (arrowSize - PixelFontData.fontSettings.charHeight * textScale) / 2;
+    drawPixelText(ctx, text, startX, textY, "#FFFFFF", textScale);
+
+    const arrowX = startX + textWidth + padding + animOffset;
+    const arrowY = startY + arrowSize / 2;
+    UIRenderer.drawRightArrow(ctx, arrowX, arrowY, arrowSize, "#FFFFFF");
+
+    ctx.globalAlpha = 1.0;
   }
 
   render(ctx) {
@@ -202,5 +247,10 @@ class UI {
 
     UIRenderer.drawStatusLights(ctx, this, actualYPosition);
     UIRenderer.drawMiniMap(ctx, this, actualYPosition);
+
+    // Render drive instruction if needed
+    if (this.showDriveInstruction) {
+      this.renderDriveInstruction(ctx);
+    }
   }
 }
