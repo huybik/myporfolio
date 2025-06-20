@@ -16,4 +16,15 @@ body {
 
 canvas {
   display: block; /* Removes extra space below canvas */
+  image-rendering: pixelated; /* Ensures crisp pixels */
+  image-rendering: -moz-crisp-edges;
+  image-rendering: crisp-edges;
 }
+
+/* Example for a custom pixel font if loaded via CSS */
+/*
+  @font-face {
+    font-family: 'MyPixelFont';
+    src: url('path/to/your/pixel-font.ttf') format('truetype');
+  }
+  */

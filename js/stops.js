@@ -1,8 +1,30 @@
 // js/stops.js
 const StopMarkers = {
-  drawDefaultMarker: (ctx, x, y, isActive) => {
-    drawPixelRect(ctx, x - 15, y - 60, 30, 60, isActive ? "yellow" : "orange");
-    drawPixelRect(ctx, x - 12, y - 55, 24, 30, isActive ? "black" : "#333");
+  drawDefaultMarker: (ctx, x, y, isActive, gameTime = 0) => {
+    const baseColor = isActive ? "yellow" : "orange";
+    const detailColor = isActive ? "black" : "#333";
+
+    let pulseFactor = 1.0;
+    if (isActive) {
+      pulseFactor = 1.0 + ((Math.sin(gameTime * 5) + 1) / 2) * 0.1;
+    }
+
+    drawPixelRect(
+      ctx,
+      x - 15 * pulseFactor,
+      y - 60 * pulseFactor,
+      30 * pulseFactor,
+      60 * pulseFactor,
+      baseColor
+    );
+    drawPixelRect(
+      ctx,
+      x - 12 * pulseFactor,
+      y - 55 * pulseFactor,
+      24 * pulseFactor,
+      30 * pulseFactor,
+      detailColor
+    );
     if (isActive) {
       ctx.fillStyle = "yellow";
       ctx.font = "10px Courier New";
@@ -11,15 +33,54 @@ const StopMarkers = {
       ctx.textAlign = "left";
     }
   },
-  drawArcadeCabinet: (ctx, x, y, isActive) => {
-    const cabinetWidth = 30;
-    const cabinetHeight = 50;
-    const screenHeight = 15;
-    const controlPanelHeight = 8;
-    const baseHeight = 5;
-    const mainColor = isActive ? "#FFD700" : "#D3D3D3";
-    const accentColor = "#808080";
-    const screenColor = isActive ? "#00FF00" : "#008000";
+
+  drawArcadeCabinet: (ctx, x, y, isActive, gameTime = 0) => {
+    const themePalette = Palettes.gaming;
+    // More specific check for all required sub-properties
+    if (
+      !themePalette ||
+      !themePalette.objects_primary ||
+      !themePalette.emissive ||
+      !themePalette.props || // Check for props
+      !themePalette.objects_accent
+    ) {
+      // Check for objects_accent
+      console.error(
+        "Arcade Cabinet: Gaming palette or its sub-properties (objects_primary, emissive, props, objects_accent) are undefined!",
+        themePalette
+      );
+      StopMarkers.drawDefaultMarker(ctx, x, y, isActive, gameTime);
+      return;
+    }
+
+    const cabinetWidth = 32;
+    const cabinetHeight = 55;
+    const screenHeight = 18;
+    const controlPanelHeight = 10;
+    const baseHeight = 6;
+
+    let mainColor = themePalette.objects_primary.base;
+    let accentColor = themePalette.objects_primary.shadow;
+    let screenColor =
+      themePalette.emissive && themePalette.emissive.length > 0
+        ? themePalette.emissive[0]
+        : "#FFFF00";
+    let highlightColor = themePalette.objects_primary.light;
+
+    if (isActive) {
+      const pulse = (Math.sin(gameTime * 6) + 1) / 2;
+      mainColor = interpolateColor(
+        themePalette.objects_primary.base,
+        themePalette.objects_primary.light,
+        pulse * 0.5
+      );
+      if (themePalette.emissive && themePalette.emissive.length > 0) {
+        screenColor = getRandomColor(themePalette.emissive);
+      } else {
+        screenColor = "#FFFF00";
+      }
+    }
+
     drawPixelRect(
       ctx,
       x - cabinetWidth / 2,
@@ -38,178 +99,493 @@ const StopMarkers = {
     );
     drawPixelRect(
       ctx,
-      x - cabinetWidth / 2 - 2,
-      y - baseHeight - controlPanelHeight,
-      cabinetWidth + 4,
-      controlPanelHeight,
-      "#A0522D"
+      x - cabinetWidth / 2,
+      y - cabinetHeight,
+      3,
+      cabinetHeight - baseHeight,
+      accentColor
     );
     drawPixelRect(
       ctx,
+      x + cabinetWidth / 2 - 3,
+      y - cabinetHeight,
+      3,
+      cabinetHeight - baseHeight,
+      highlightColor
+    );
+
+    const cpWidth = cabinetWidth + 6;
+    const controlPanelColor =
+      themePalette.objects_accent && themePalette.objects_accent.length > 0
+        ? themePalette.objects_accent[0]
+        : "#FF00FF";
+    drawPixelRect(
+      ctx,
+      x - cpWidth / 2,
+      y - baseHeight - controlPanelHeight,
+      cpWidth,
+      controlPanelHeight,
+      controlPanelColor
+    );
+    drawPixelRect(
+      ctx,
+      x - 5,
+      y - baseHeight - controlPanelHeight - 6,
+      4,
+      6,
+      accentColor
+    );
+    const joystickTopColor =
+      themePalette.props && themePalette.props.length > 0
+        ? themePalette.props[0]
+        : "#FF0000";
+    drawPixelRect(
+      ctx,
+      x - 6,
+      y - baseHeight - controlPanelHeight - 9,
+      6,
+      3,
+      joystickTopColor
+    );
+
+    const buttonColor1Active =
+      themePalette.props && themePalette.props.length > 1
+        ? themePalette.props[1]
+        : "#FFFF00";
+    const buttonColor1Inactive =
+      themePalette.props && themePalette.props.length > 2
+        ? themePalette.props[2]
+        : "#00FF00";
+    const buttonColor2Active =
+      themePalette.props && themePalette.props.length > 2
+        ? themePalette.props[2]
+        : "#00FF00";
+    const buttonColor2Inactive =
+      themePalette.props && themePalette.props.length > 1
+        ? themePalette.props[1]
+        : "#FFFF00";
+
+    drawPixelRect(
+      ctx,
+      x + 2,
+      y - baseHeight - controlPanelHeight + 3,
+      3,
+      3,
+      isActive ? buttonColor1Active : buttonColor1Inactive
+    );
+    drawPixelRect(
+      ctx,
+      x + 7,
+      y - baseHeight - controlPanelHeight + 3,
+      3,
+      3,
+      isActive ? buttonColor2Active : buttonColor2Inactive
+    );
+
+    drawPixelRect(
+      ctx,
       x - cabinetWidth / 2 + 3,
-      y - cabinetHeight + 3,
+      y - cabinetHeight + 5,
       cabinetWidth - 6,
-      screenHeight + 6,
+      screenHeight + 10,
       accentColor
     );
     drawPixelRect(
       ctx,
       x - cabinetWidth / 2 + 5,
-      y - cabinetHeight + 5,
+      y - cabinetHeight + 7,
       cabinetWidth - 10,
       screenHeight,
-      screenColor
+      "#000000"
     );
+
     if (isActive) {
-      drawPixelRect(
-        ctx,
-        x - cabinetWidth / 2 + 7,
-        y - cabinetHeight + 7,
-        2,
-        2,
-        "#FFFF00"
-      );
-      drawPixelRect(
-        ctx,
-        x - cabinetWidth / 2 + 15,
-        y - cabinetHeight + 10,
-        3,
-        2,
-        "#FF00FF"
-      );
+      const numFrames = 3;
+      const screenFrame = Math.floor(gameTime * 2) % numFrames;
+      const screenPixelSize = 2;
+      const screenContentX = x - cabinetWidth / 2 + 6;
+      const screenContentY = y - cabinetHeight + 8;
+      const activeScreenColor =
+        themePalette.emissive && themePalette.emissive.length > 0
+          ? screenColor
+          : "#FFFF00";
+      const playerShipColor =
+        themePalette.props && themePalette.props.length > 2
+          ? Palettes.gaming.props[2]
+          : "#00FF00";
+
+      if (screenFrame === 0) {
+        drawPixelRect(
+          ctx,
+          screenContentX + 4,
+          screenContentY + 2,
+          screenPixelSize * 2,
+          screenPixelSize,
+          activeScreenColor
+        );
+        drawPixelRect(
+          ctx,
+          screenContentX + 2,
+          screenContentY + 4,
+          screenPixelSize * 4,
+          screenPixelSize,
+          activeScreenColor
+        );
+        drawPixelRect(
+          ctx,
+          screenContentX,
+          screenContentY + 6,
+          screenPixelSize * 6,
+          screenPixelSize,
+          activeScreenColor
+        );
+        drawPixelRect(
+          ctx,
+          screenContentX + 2,
+          screenContentY + 8,
+          screenPixelSize,
+          screenPixelSize,
+          activeScreenColor
+        );
+        drawPixelRect(
+          ctx,
+          screenContentX + 8,
+          screenContentY + 8,
+          screenPixelSize,
+          screenPixelSize,
+          activeScreenColor
+        );
+      } else if (screenFrame === 1) {
+        drawPixelRect(
+          ctx,
+          screenContentX + 6,
+          screenContentY + 10,
+          screenPixelSize * 2,
+          screenPixelSize,
+          playerShipColor
+        );
+        drawPixelRect(
+          ctx,
+          screenContentX + 4,
+          screenContentY + 12,
+          screenPixelSize * 4,
+          screenPixelSize,
+          playerShipColor
+        );
+      } else {
+        const explosionColor =
+          themePalette.emissive && themePalette.emissive.length > 0
+            ? getRandomColor(Palettes.gaming.emissive)
+            : "#FF8C00";
+        drawPixelRect(
+          ctx,
+          screenContentX + 4,
+          screenContentY + 5,
+          screenPixelSize * 3,
+          screenPixelSize * 3,
+          explosionColor
+        );
+      }
     }
+
+    const marqueeHeight = 10;
+    const marqueeAccentColor =
+      themePalette.objects_accent && themePalette.objects_accent.length > 1
+        ? themePalette.objects_accent[1]
+        : "#00FF00";
     drawPixelRect(
       ctx,
-      x - cabinetWidth / 2,
-      y - cabinetHeight - 8,
-      cabinetWidth,
-      8,
-      "#FF6347"
+      x - cabinetWidth / 2 - 2,
+      y - cabinetHeight - marqueeHeight,
+      cabinetWidth + 4,
+      marqueeHeight,
+      marqueeAccentColor
     );
+    const marqueeTextColorActive =
+      themePalette.emissive && themePalette.emissive.length > 2
+        ? themePalette.emissive[2]
+        : "#FF69B4";
     if (isActive) {
-      ctx.fillStyle = "black";
-      ctx.font = "8px Courier New";
-      ctx.textAlign = "center";
-      ctx.fillText("AI", x, y - cabinetHeight - 1);
-      ctx.textAlign = "left";
+      drawPixelRect(
+        ctx,
+        x - 5,
+        y - cabinetHeight - marqueeHeight + 3,
+        10,
+        4,
+        marqueeTextColorActive
+      );
+    } else {
+      drawPixelRect(
+        ctx,
+        x - 5,
+        y - cabinetHeight - marqueeHeight + 3,
+        10,
+        4,
+        themePalette.objects_primary.shadow
+      );
+    }
+
+    if (isActive) {
+      const glowBaseColor =
+        themePalette.emissive && themePalette.emissive.length > 0
+          ? themePalette.emissive[0]
+          : "#FFFF00";
+      ctx.globalAlpha = ((Math.sin(gameTime * 5) + 1) / 2) * 0.3 + 0.1;
+      drawPixelRect(
+        ctx,
+        x - cabinetWidth / 2 - 5,
+        y - cabinetHeight - marqueeHeight - 5,
+        cabinetWidth + 10,
+        cabinetHeight + marqueeHeight + baseHeight + 10,
+        glowBaseColor
+      );
+      ctx.globalAlpha = 1.0;
     }
   },
-  drawHolographicTerminal: (ctx, x, y, isActive) => {
-    const baseWidth = 35;
-    const baseHeight = 8;
-    const postHeight = 25;
-    const screenWidth = 30;
-    const screenHeight = 20;
-    const primaryColor = isActive
-      ? Palettes.futuristic.lights[0]
-      : Palettes.futuristic.accents[1];
-    const accentColor = Palettes.futuristic.buildings[2];
+
+  drawHolographicTerminal: (ctx, x, y, isActive, gameTime = 0) => {
+    const themePalette = Palettes.futuristic;
+    if (
+      !themePalette ||
+      !themePalette.emissive ||
+      !themePalette.objects_primary ||
+      !themePalette.objects_accent
+    ) {
+      console.error(
+        "Holographic Terminal: Futuristic palette or its properties are undefined!",
+        themePalette
+      );
+      StopMarkers.drawDefaultMarker(ctx, x, y, isActive, gameTime);
+      return;
+    }
+
+    const baseWidth = 40;
+    const baseHeight = 10;
+    const postHeight = 20;
+    const screenWidth = 35;
+    const screenHeight = 25;
+
+    let primaryColor =
+      themePalette.emissive && themePalette.emissive.length > 0
+        ? themePalette.emissive[0]
+        : "#00FFFF";
+    let accentColor = themePalette.objects_primary.shadow;
+    let baseStructColor = themePalette.objects_primary.base;
+
+    if (isActive) {
+      const pulse = (Math.sin(gameTime * 4) + 1) / 2;
+      if (themePalette.emissive && themePalette.emissive.length > 1) {
+        primaryColor = interpolateColor(
+          themePalette.emissive[0],
+          themePalette.emissive[1],
+          pulse
+        );
+      } else if (themePalette.emissive && themePalette.emissive.length > 0) {
+        primaryColor = themePalette.emissive[0];
+      } else {
+        primaryColor = "#00FFFF";
+      }
+      baseStructColor = lightenDarkenColor(
+        themePalette.objects_primary.base,
+        Math.floor(pulse * 20)
+      );
+    }
+
     drawPixelRect(
       ctx,
       x - baseWidth / 2,
       y - baseHeight,
       baseWidth,
       baseHeight,
+      baseStructColor
+    );
+    drawPixelRect(
+      ctx,
+      x - baseWidth / 2 + 2,
+      y - baseHeight + 2,
+      baseWidth - 4,
+      baseHeight - 4,
       accentColor
     );
     drawPixelRect(
       ctx,
-      x - 3,
+      x - 4,
       y - baseHeight - postHeight,
-      6,
+      8,
       postHeight,
-      accentColor
+      baseStructColor
     );
+
     const screenY = y - baseHeight - postHeight - screenHeight;
-    if (isActive) {
-      ctx.globalAlpha = 0.3;
+
+    const numLayers = isActive ? 4 : 2;
+    for (let i = 0; i < numLayers; i++) {
+      const layerAlpha = isActive ? 0.2 + i * 0.15 : 0.3 + i * 0.1;
+      const layerOffset = isActive ? Math.sin(gameTime * 2 + i) * 3 : 0;
+      const layerWidth = screenWidth + i * 4;
+      const layerHeight = screenHeight + i * 2;
+
+      ctx.globalAlpha = layerAlpha;
       drawPixelRect(
         ctx,
-        x - screenWidth / 2 - 5,
-        screenY - 5,
-        screenWidth + 10,
-        screenHeight + 10,
-        Palettes.futuristic.lights[0]
-      );
-      ctx.globalAlpha = 0.6;
-      drawPixelRect(
-        ctx,
-        x - screenWidth / 2 - 2,
-        screenY - 2,
-        screenWidth + 4,
-        screenHeight + 4,
-        Palettes.futuristic.lights[0]
+        x - layerWidth / 2,
+        screenY - i * 2 + layerOffset,
+        layerWidth,
+        layerHeight,
+        primaryColor
       );
       ctx.globalAlpha = 1.0;
     }
-    drawPixelRect(
-      ctx,
-      x - screenWidth / 2,
-      screenY,
-      screenWidth,
-      screenHeight,
-      primaryColor
-    );
+
+    const strokeStyleColor =
+      themePalette.objects_accent && themePalette.objects_accent.length > 0
+        ? themePalette.objects_accent[0]
+        : themePalette.objects_primary.light;
     ctx.strokeStyle = isActive
-      ? Palettes.futuristic.accents[0]
-      : Palettes.futuristic.buildings[1];
+      ? strokeStyleColor
+      : themePalette.objects_primary.light;
     ctx.lineWidth = 1;
-    for (let i = 0; i < 3; i++) {
-      const lineY = screenY + 5 + i * 5;
+    const lineCount = 5;
+    for (let i = 0; i < lineCount; i++) {
+      const lineYVal = screenY + 4 + i * (screenHeight / lineCount);
+      const scrollOffset = isActive ? (gameTime * 15 + i * 5) % screenWidth : 0;
       ctx.beginPath();
-      ctx.moveTo(Math.floor(x - screenWidth / 2 + 3), Math.floor(lineY));
+      ctx.moveTo(
+        Math.floor(x - screenWidth / 2 + 3 + scrollOffset),
+        Math.floor(lineYVal)
+      );
       ctx.lineTo(
-        Math.floor(x + screenWidth / 2 - 3),
-        Math.floor(lineY + (Math.random() - 0.5) * 2)
+        Math.floor(x - screenWidth / 2 + 3 + scrollOffset - 10),
+        Math.floor(lineYVal)
       );
       ctx.stroke();
+
+      if (isActive && Math.random() < 0.3) {
+        const glyphColor =
+          themePalette.emissive && themePalette.emissive.length > 2
+            ? themePalette.emissive[2]
+            : "#FFFF00";
+        drawPixelRect(
+          ctx,
+          x - screenWidth / 2 + getRandomInt(5, screenWidth - 10),
+          lineYVal - 2,
+          2,
+          2,
+          glyphColor
+        );
+      }
     }
+
     if (isActive) {
+      ctx.globalAlpha = ((Math.sin(gameTime * 5) + 1) / 2) * 0.2 + 0.1;
       drawPixelRect(
         ctx,
-        x - screenWidth / 2 + 5,
-        screenY + 3,
-        3,
-        3,
-        Palettes.futuristic.lights[1]
+        x - screenWidth / 2 - 10,
+        screenY - 10,
+        screenWidth + 20,
+        screenHeight + 20,
+        primaryColor
       );
-      drawPixelRect(
-        ctx,
-        x + screenWidth / 2 - 8,
-        screenY + screenHeight - 6,
-        3,
-        3,
-        Palettes.futuristic.lights[2]
-      );
+      ctx.globalAlpha = 1.0;
     }
   },
-  drawPixelWarehouse: (ctx, x, y, isActive) => {
-    const buildingWidth = 50;
-    const buildingHeight = 40;
-    const roofHeight = 10;
-    const doorWidth = 15;
-    const doorHeight = 25;
-    const mainColor = isActive
-      ? Palettes.industrial.metal[1]
-      : Palettes.industrial.buildings[0];
-    const roofColor = Palettes.industrial.buildings[2];
-    const doorColor = Palettes.industrial.metal[2];
+
+  drawPixelWarehouse: (ctx, x, y, isActive, gameTime = 0) => {
+    const themePalette = Palettes.industrial;
+    if (
+      !themePalette ||
+      !themePalette.objects_primary ||
+      !themePalette.objects_accent ||
+      !themePalette.emissive
+    ) {
+      console.error(
+        "Pixel Warehouse: Industrial palette or its properties are undefined!",
+        themePalette
+      );
+      StopMarkers.drawDefaultMarker(ctx, x, y, isActive, gameTime);
+      return;
+    }
+
+    const buildingWidth = 55;
+    const buildingHeight = 45;
+    const roofHeight = 12;
+    const doorWidth = 18;
+    const doorHeight = 28;
+
+    let mainColor = themePalette.objects_primary.base;
+    let roofColor = themePalette.objects_primary.shadow;
+    let doorColor =
+      themePalette.objects_accent && themePalette.objects_accent.length > 1
+        ? themePalette.objects_accent[1]
+        : "#A0522D";
+    let highlightColor = themePalette.objects_primary.light;
+
+    if (isActive) {
+      const pulse = (Math.sin(gameTime * 3) + 1) / 2;
+      mainColor = lightenDarkenColor(
+        themePalette.objects_primary.base,
+        Math.floor(pulse * 10)
+      );
+      if (
+        themePalette.objects_accent &&
+        themePalette.objects_accent.length > 1 &&
+        themePalette.emissive &&
+        themePalette.emissive.length > 0
+      ) {
+        doorColor = interpolateColor(
+          themePalette.objects_accent[1],
+          themePalette.emissive[0],
+          pulse
+        );
+      } else {
+        doorColor = "#FFA500";
+      }
+    }
+
     drawPixelRect(
       ctx,
       x - buildingWidth / 2,
       y - buildingHeight,
-      buildingWidth,
+      buildingWidth / 3,
+      buildingHeight,
+      themePalette.objects_primary.shadow
+    );
+    drawPixelRect(
+      ctx,
+      x - buildingWidth / 2 + buildingWidth / 3,
+      y - buildingHeight,
+      buildingWidth / 3,
       buildingHeight,
       mainColor
     );
+    drawPixelRect(
+      ctx,
+      x - buildingWidth / 2 + (buildingWidth * 2) / 3,
+      y - buildingHeight,
+      buildingWidth / 3,
+      buildingHeight,
+      highlightColor
+    );
+
+    for (let i = 0; i < buildingHeight; i += 4) {
+      drawPixelRect(
+        ctx,
+        x - buildingWidth / 2,
+        y - buildingHeight + i,
+        buildingWidth,
+        1,
+        lightenDarkenColor(mainColor, -20)
+      );
+    }
+
     ctx.fillStyle = roofColor;
     ctx.beginPath();
     ctx.moveTo(
-      Math.floor(x - buildingWidth / 2 - 5),
+      Math.floor(x - buildingWidth / 2 - 3),
       Math.floor(y - buildingHeight)
     );
     ctx.lineTo(
-      Math.floor(x + buildingWidth / 2 + 5),
+      Math.floor(x + buildingWidth / 2 + 3),
       Math.floor(y - buildingHeight)
     );
     ctx.lineTo(
@@ -224,61 +600,122 @@ const StopMarkers = {
     ctx.fill();
     drawPixelRect(
       ctx,
-      x - doorWidth / 2,
-      y - doorHeight,
-      doorWidth,
-      doorHeight,
-      doorColor
+      x - buildingWidth / 2,
+      y - buildingHeight - roofHeight,
+      buildingWidth,
+      2,
+      lightenDarkenColor(roofColor, 20)
     );
+
+    const doorX = x - doorWidth / 2;
+    const doorY = y - doorHeight;
+    drawPixelRect(ctx, doorX, doorY, doorWidth, doorHeight, doorColor);
+    for (let i = 0; i < doorHeight; i += 6) {
+      drawPixelRect(
+        ctx,
+        doorX,
+        doorY + i,
+        doorWidth,
+        2,
+        lightenDarkenColor(doorColor, -30)
+      );
+    }
     drawPixelRect(
       ctx,
-      x - doorWidth / 2,
-      y - doorHeight + 5,
-      doorWidth,
+      doorX + doorWidth / 2 - 2,
+      doorY + doorHeight * 0.7,
+      4,
       2,
-      lightenDarkenColor(doorColor, -30)
+      lightenDarkenColor(doorColor, -50)
     );
-    drawPixelRect(
-      ctx,
-      x - doorWidth / 2,
-      y - doorHeight + 12,
-      doorWidth,
-      2,
-      lightenDarkenColor(doorColor, -30)
-    );
+
     if (isActive) {
+      const lightOn = Math.floor(gameTime * 2) % 2 === 0;
+      const activeLightColor =
+        themePalette.emissive && themePalette.emissive.length > 0
+          ? themePalette.emissive[0]
+          : "#FFA500";
+      if (lightOn) {
+        drawPixelRect(
+          ctx,
+          x - 2,
+          y - buildingHeight - roofHeight - 5,
+          4,
+          3,
+          activeLightColor
+        );
+        ctx.globalAlpha = 0.3;
+        drawPixelRect(
+          ctx,
+          x - 4,
+          y - buildingHeight - roofHeight - 2,
+          8,
+          5,
+          activeLightColor
+        );
+        ctx.globalAlpha = 1.0;
+      } else {
+        drawPixelRect(
+          ctx,
+          x - 2,
+          y - buildingHeight - roofHeight - 5,
+          4,
+          3,
+          themePalette.objects_primary.shadow
+        );
+      }
+    }
+
+    const signAccentColor =
+      themePalette.objects_accent && themePalette.objects_accent.length > 0
+        ? themePalette.objects_accent[0]
+        : "#B7410E";
+    const signEmissiveColor =
+      themePalette.emissive && themePalette.emissive.length > 1
+        ? themePalette.emissive[1]
+        : "#FFD700";
+    drawPixelRect(
+      ctx,
+      x + buildingWidth / 2 - 15,
+      y - buildingHeight + 5,
+      10,
+      8,
+      themePalette.objects_primary.shadow
+    );
+    drawPixelRect(
+      ctx,
+      x + buildingWidth / 2 - 14,
+      y - buildingHeight + 6,
+      8,
+      6,
+      isActive ? signEmissiveColor : signAccentColor
+    );
+
+    if (isActive) {
+      const glowColorActive =
+        themePalette.emissive && themePalette.emissive.length > 1
+          ? themePalette.emissive[1]
+          : "#FFD700";
+      ctx.globalAlpha = ((Math.sin(gameTime * 5) + 1) / 2) * 0.15;
       drawPixelRect(
         ctx,
-        x + doorWidth / 2 + 3,
-        y - doorHeight + 3,
-        5,
-        5,
-        Palettes.gaming.props[1]
+        x - buildingWidth / 2 - 5,
+        y - buildingHeight - roofHeight - 5,
+        buildingWidth + 10,
+        buildingHeight + roofHeight + 10,
+        glowColorActive
       );
-      drawPixelRect(
-        ctx,
-        x - buildingWidth / 2 - 10,
-        y - 10,
-        8,
-        10,
-        Palettes.desert[2]
-      );
-      drawPixelRect(
-        ctx,
-        x - buildingWidth / 2 - 12,
-        y - 15,
-        10,
-        5,
-        Palettes.desert[1]
-      );
+      ctx.globalAlpha = 1.0;
     }
   },
 };
 
 const StopsManager = {
   stops: [],
-  activeStop: null, // Used for visual highlighting of the marker
-  stopActivationRange: 100, // Proximity to marker for visual activation
+  activeStop: null,
+  stopActivationRange: 120,
+  zoneEntryLeadDistance: Config.CANVAS_WIDTH * 1.25,
+
   init() {
     const initialStopPosition = 2500;
     const distanceBetweenStops = 4500;
@@ -288,7 +725,7 @@ const StopsManager = {
         id: "project_ai_game",
         worldPositionX: initialStopPosition,
         theme: "gaming",
-        promptText: "AI Game Project Details", // Original prompt, less used now for main UI
+        promptText: "AI Game Project",
         markerAssetFunction: StopMarkers.drawArcadeCabinet,
         markerScreenYOffset: 0,
         isReached: false,
@@ -297,7 +734,7 @@ const StopsManager = {
         id: "project_ai_ta",
         worldPositionX: initialStopPosition + distanceBetweenStops,
         theme: "futuristic",
-        promptText: "AI TA Project Details",
+        promptText: "AI TA Project",
         markerAssetFunction: StopMarkers.drawHolographicTerminal,
         markerScreenYOffset: 0,
         isReached: false,
@@ -306,7 +743,7 @@ const StopsManager = {
         id: "project_truck_parts",
         worldPositionX: initialStopPosition + 2 * distanceBetweenStops,
         theme: "industrial",
-        promptText: "Truck Parts Project Details",
+        promptText: "Truck Parts Project",
         markerAssetFunction: StopMarkers.drawPixelWarehouse,
         markerScreenYOffset: 0,
         isReached: false,
@@ -317,54 +754,62 @@ const StopsManager = {
         "StopsManager initialized with " + this.stops.length + " stops."
       );
   },
-  update(worldCurrentX, playerScreenX, playerWidth) {
-    // Update activeStop for marker visuals (e.g., making the marker glow)
+
+  update(worldCurrentX, playerScreenX, playerWidth, game) {
     this.activeStop = null;
     const playerWorldCenterX = worldCurrentX + playerScreenX + playerWidth / 2;
+
     for (const stop of this.stops) {
       const distanceToStopMarker = Math.abs(
         playerWorldCenterX - stop.worldPositionX
       );
       if (distanceToStopMarker < this.stopActivationRange / 2) {
         this.activeStop = stop;
+        if (Input.isInteractJustPressed()) {
+          const linkURL = Config.STOP_LINKS[stop.id];
+          if (linkURL) {
+            if (Config.DEBUG_MODE) {
+              console.log(
+                `Interacting with stop: ${stop.promptText}, opening URL: ${linkURL}`
+              );
+            }
+            window.open(linkURL, "_blank");
+          }
+        }
         break;
       }
     }
-
-    // Handle zone-based interaction
-    const currentZone = this.getCurrentZone(worldCurrentX);
-    if (currentZone && currentZone.linkURL && Input.isInteractPressed()) {
-      // Debounce the interaction
-      Config.KeyBindings.INTERACT.forEach((key) => (Input.keys[key] = false));
-      if (Config.DEBUG_MODE) {
-        console.log(
-          `Interacting with zone: ${currentZone.name}, opening URL: ${currentZone.linkURL}`
-        );
-      }
-      window.open(currentZone.linkURL, "_blank");
-    }
   },
-  render(ctx, worldCurrentX, playerGroundY) {
+
+  render(ctx, worldCurrentX, playerGroundY, gameTime) {
     this.stops.forEach((stop) => {
       const stopScreenX = stop.worldPositionX - worldCurrentX;
       if (
-        stopScreenX > -this.stopActivationRange * 2 &&
-        stopScreenX < Config.CANVAS_WIDTH + this.stopActivationRange * 2
+        stopScreenX > -this.stopActivationRange * 3 &&
+        stopScreenX < Config.CANVAS_WIDTH + this.stopActivationRange * 3
       ) {
         const markerY = playerGroundY + stop.markerScreenYOffset;
-        // isActive is true if the player is near this specific marker
         const isActiveMarker =
           this.activeStop && this.activeStop.id === stop.id;
+
         if (typeof stop.markerAssetFunction === "function") {
-          stop.markerAssetFunction(ctx, stopScreenX, markerY, isActiveMarker);
+          stop.markerAssetFunction(
+            ctx,
+            stopScreenX,
+            markerY,
+            isActiveMarker,
+            gameTime
+          );
         } else {
           StopMarkers.drawDefaultMarker(
             ctx,
             stopScreenX,
             markerY,
-            isActiveMarker
+            isActiveMarker,
+            gameTime
           );
         }
+
         if (Config.DEBUG_MODE && isActiveMarker) {
           ctx.strokeStyle = "yellow";
           ctx.lineWidth = 1;
@@ -382,37 +827,30 @@ const StopsManager = {
       }
     });
   },
+
   getCurrentZone(worldCurrentX) {
     let currentZone = {
-      name: "The Wasteland",
+      name: "The Long Road",
       theme: "desert_start",
-      skyColor: Palettes.desert[4],
-      linkURL: null,
+      skyColor: (Palettes.desert.sky && Palettes.desert.sky[0]) || "#FAD7A0",
+      promptText: "Portfolio Drive",
       stopId: null,
     };
 
-    const zoneEntryLeadDistance = Config.CANVAS_WIDTH * 1.25;
-
     for (let i = this.stops.length - 1; i >= 0; i--) {
       const stop = this.stops[i];
-      const zoneEntryPosition = stop.worldPositionX - zoneEntryLeadDistance;
+      const zoneStartPos = stop.worldPositionX - this.zoneEntryLeadDistance;
 
-      if (worldCurrentX >= zoneEntryPosition) {
-        let skyColor = Palettes.desert[4]; // Default sky
-        if (stop.theme === "gaming") skyColor = Palettes.gaming.sky[0];
-        else if (stop.theme === "futuristic")
-          skyColor = Palettes.futuristic.sky[0];
-        else if (stop.theme === "industrial")
-          skyColor = Palettes.industrial.sky[0];
-
+      if (worldCurrentX >= zoneStartPos) {
+        let themePalette = Palettes[stop.theme] || Palettes.desert;
         currentZone = {
           name: `${
             stop.theme.charAt(0).toUpperCase() + stop.theme.slice(1)
-          } Zone`,
+          } Sector`,
           theme: stop.theme,
-          skyColor: skyColor,
-          linkURL: Config.STOP_LINKS[stop.id], // Reference link from Config
-          stopId: stop.id, // Include the stop ID for reference
+          skyColor: (themePalette.sky && themePalette.sky[0]) || "#87CEEB",
+          promptText: stop.promptText,
+          stopId: stop.id,
         };
         break;
       }
@@ -420,14 +858,15 @@ const StopsManager = {
 
     if (this.stops.length > 0) {
       const firstStop = this.stops[0];
-      const firstZoneEntryPosition =
-        firstStop.worldPositionX - zoneEntryLeadDistance;
-      if (worldCurrentX < firstZoneEntryPosition) {
+      const firstZoneStartPos =
+        firstStop.worldPositionX - this.zoneEntryLeadDistance;
+      if (worldCurrentX < firstZoneStartPos) {
         currentZone = {
-          name: "Desert Drive",
+          name: "Desert Approach",
           theme: "desert_start",
-          skyColor: Palettes.desert[4],
-          linkURL: null,
+          skyColor:
+            (Palettes.desert.sky && Palettes.desert.sky[0]) || "#FAD7A0",
+          promptText: "The Journey Begins...",
           stopId: null,
         };
       }
