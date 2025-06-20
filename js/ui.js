@@ -313,16 +313,7 @@ class UI {
           this.fontSettings.charHeight * this.fontSettings.scale) /
           2; // Align icon vertically
 
-      // Removed pulsing alpha for F-Key icon
-      // let iconPulseAlpha = 1.0;
-      // if (Math.floor(this.game.gameTime * 4) % 2 === 0) {
-      //   iconPulseAlpha =
-      //     0.7 + ((Math.sin(this.game.gameTime * 10) + 1) / 2) * 0.3;
-      // }
-      // ctx.globalAlpha = iconPulseAlpha;
-
       ctx.drawImage(this.fKeyIcon, currentX, iconY);
-      // ctx.globalAlpha = 1.0; // Reset if it was changed, but now it's not.
 
       currentX +=
         this.fKeyIcon.width +
@@ -431,19 +422,30 @@ class UI {
 
   // I.1.C UI Icons: Minimap
   // III.1.C Minimap Enhancements
+  // ROTATED 90 DEGREES RIGHT
   drawMiniMap(ctx, panelY) {
-    const mapSize = this.height - 10 * this.fontSettings.scale;
-    const mapX = Config.CANVAS_WIDTH - mapSize - 15 * this.fontSettings.scale;
-    const mapY = panelY + (this.height - mapSize) / 2;
+    const mapDimension = this.height - 10 * this.fontSettings.scale; // Map will be square
+    const mapWidth = mapDimension;
+    const mapHeight = mapDimension;
+
+    // Position on the right side of the UI panel
+    const mapX = Config.CANVAS_WIDTH - mapWidth - 15 * this.fontSettings.scale;
+    const mapY = panelY + (this.height - mapHeight) / 2;
 
     // Background and Border
-    this.drawPixelArtFrame(ctx, mapX - 3, mapY - 3, mapSize + 6, mapSize + 6); // Outer frame
-    drawPixelRect(ctx, mapX, mapY, mapSize, mapSize, this.infoScreenColor); // Inner BG
+    this.drawPixelArtFrame(
+      ctx,
+      mapX - 3,
+      mapY - 3,
+      mapWidth + 6,
+      mapHeight + 6
+    ); // Outer frame
+    drawPixelRect(ctx, mapX, mapY, mapWidth, mapHeight, this.infoScreenColor); // Inner BG
 
     // Subtle Background Texture
     const texColor = Palettes.ui.MINIMAP_TEXTURE;
-    for (let mx = 0; mx < mapSize; mx += 4 * this.fontSettings.scale) {
-      for (let my = 0; my < mapSize; my += 4 * this.fontSettings.scale) {
+    for (let mx = 0; mx < mapWidth; mx += 4 * this.fontSettings.scale) {
+      for (let my = 0; my < mapHeight; my += 4 * this.fontSettings.scale) {
         if (
           (mx / (4 * this.fontSettings.scale) +
             my / (4 * this.fontSettings.scale)) %
@@ -462,10 +464,12 @@ class UI {
       }
     }
 
-    // Player Icon (small arrow or car shape)
     const playerIconSize = 3 * this.fontSettings.scale;
-    const playerMapX = mapX + mapSize / 2 - playerIconSize / 2;
-    const playerMapY = mapY + mapSize * 0.8 - playerIconSize / 2; // Player at bottom 80% of map
+    // Player icon on the left part of the map, centered vertically, facing right
+    const playerMapX = mapX + mapWidth * 0.2 - playerIconSize / 2;
+    const playerMapY = mapY + mapHeight / 2 - playerIconSize / 2;
+
+    // Draw Player Icon (base square)
     drawPixelRect(
       ctx,
       playerMapX,
@@ -474,36 +478,49 @@ class UI {
       playerIconSize,
       Palettes.ui.MINIMAP_PLAYER
     );
-    // Arrow shape for player
+    // Arrow shape for player (points RIGHT)
     drawPixelRect(
       ctx,
-      playerMapX + playerIconSize / 3,
-      playerMapY - playerIconSize / 3,
-      playerIconSize / 3,
-      playerIconSize / 3,
+      playerMapX + playerIconSize, // X: Start after the base square
+      playerMapY + playerIconSize / 3, // Y: Vertically align with the middle third of the base
+      playerIconSize / 3, // Width of the arrow point
+      playerIconSize / 3, // Height of the arrow point
       Palettes.ui.MINIMAP_PLAYER
     );
 
     // Stop Icons
-    const mapRangeWorldUnits = StopsManager.zoneEntryLeadDistance * 2.5; // How much world distance the map displays vertically
-    StopsManager.stops.forEach((stop) => {
+    // mapRangeWorldUnits defines how much world distance is shown "ahead" (now to the right)
+    const mapRangeWorldUnits = StopsManager.zoneEntryLeadDistance * 2.5;
+    // The portion of the map's width used to display this range (e.g., 70% of map width)
+    const mapDisplayRangePixels = mapWidth * 0.7;
+
+    StopsManager.stops.forEach((stop, stopIndex) => {
       const distanceToPlayer = stop.worldPositionX - this.game.world.worldX;
-      // Normalize distance to map's vertical range (0 at player, 1 at top of map range)
+      // Normalize distance: 0 at player, 1 at mapRangeWorldUnits ahead
       const normalizedDist = distanceToPlayer / mapRangeWorldUnits;
 
+      // Only draw if within map's conceptual range (slightly behind to full range ahead)
       if (normalizedDist < 1 && normalizedDist > -0.2) {
-        // Only draw if within map's visual range + a bit below
         const stopDotSize = 2 * this.fontSettings.scale;
-        // X position can be slightly varied based on stop index or type for less overlap
-        const stopDotX =
-          mapX +
-          mapSize / 2 -
-          stopDotSize / 2 +
-          (StopsManager.stops.indexOf(stop) - 1) * (stopDotSize * 2);
-        const stopDotY = playerMapY - normalizedDist * mapSize * 0.7; // Scale y based on normalized distance
 
-        if (stopDotY > mapY && stopDotY < mapY + mapSize - stopDotSize) {
-          // Cull to map bounds
+        // X position based on normalized distance, relative to player's X position on map
+        // Extends to the right for positive distances
+        const stopDotX = playerMapX + normalizedDist * mapDisplayRangePixels;
+
+        // Y position spread vertically, centered around map's horizontal midline
+        // Calculate offset for centering the spread of stops
+        const yOffset =
+          (stopIndex - (StopsManager.stops.length - 1) / 2) *
+          (stopDotSize * 2.5); // Spacing factor 2.5
+        const stopDotY = mapY + mapHeight / 2 - stopDotSize / 2 + yOffset;
+
+        // Cull to map bounds (both X and Y)
+        if (
+          stopDotX >= mapX &&
+          stopDotX < mapX + mapWidth - stopDotSize &&
+          stopDotY >= mapY &&
+          stopDotY < mapY + mapHeight - stopDotSize
+        ) {
           let stopColor = Palettes.ui.MINIMAP_STOP_DEFAULT;
           if (stop.theme === "gaming")
             stopColor = Palettes.ui.MINIMAP_STOP_GAMING;
@@ -517,8 +534,11 @@ class UI {
             StopsManager.activeStop.id === stop.id
           ) {
             // Pulse active stop
-            const pulse = (Math.sin(this.game.gameTime * 8) + 1) / 2;
-            const s = stopDotSize + Math.floor(pulse * 2);
+            const pulse = (Math.sin(this.game.gameTime * 8) + 1) / 2; // 0 to 1
+            const pulseSizeIncrease = Math.floor(
+              pulse * 2 * this.fontSettings.scale
+            ); // Scale pulse effect
+            const s = stopDotSize + pulseSizeIncrease;
             drawPixelRect(
               ctx,
               Math.floor(stopDotX - (s - stopDotSize) / 2),
@@ -541,8 +561,7 @@ class UI {
       }
     });
 
-    // Zone Boundaries (Simplified: show next zone boundary)
-    // This is complex to do accurately for all zones. Showing next one is a start.
+    // Zone Boundaries (Simplified: show next zone boundary as a vertical line)
     let nextStopForBoundary = null;
     for (const stop of StopsManager.stops) {
       if (
@@ -558,16 +577,26 @@ class UI {
         nextStopForBoundary.worldPositionX - StopsManager.zoneEntryLeadDistance;
       const distanceToBoundary = boundaryWorldX - this.game.world.worldX;
       const normalizedBoundaryDist = distanceToBoundary / mapRangeWorldUnits;
-      if (normalizedBoundaryDist < 1 && normalizedBoundaryDist > 0) {
-        const boundaryY = playerMapY - normalizedBoundaryDist * mapSize * 0.7;
-        if (boundaryY > mapY && boundaryY < mapY + mapSize - 1) {
+
+      // Only draw if boundary is within the forward viewable range on map
+      if (normalizedBoundaryDist < 1 && normalizedBoundaryDist >= 0) {
+        // >=0 to include boundary at player pos
+        const boundaryLineX =
+          playerMapX + normalizedBoundaryDist * mapDisplayRangePixels;
+        const boundaryLineWidth = 1 * this.fontSettings.scale;
+
+        // Cull to map's X bounds (line is vertical)
+        if (
+          boundaryLineX >= mapX &&
+          boundaryLineX < mapX + mapWidth - boundaryLineWidth
+        ) {
           ctx.globalAlpha = 0.3;
           drawPixelRect(
             ctx,
-            mapX,
-            boundaryY,
-            mapSize,
-            1 * this.fontSettings.scale,
+            Math.floor(boundaryLineX), // Ensure integer coord for crisp line
+            mapY, // Start at top of map
+            boundaryLineWidth, // Width of the vertical line
+            mapHeight, // Full height of map
             Palettes.ui.FRAME_HIGHLIGHT
           );
           ctx.globalAlpha = 1.0;
@@ -580,3 +609,12 @@ class UI {
 function darkenColor(hex, percent) {
   return lightenDarkenColor(hex, -Math.abs(percent));
 }
+
+// Assume lightenDarkenColor, drawPixelRect, Config, Palettes, PixelFontData, StopsManager are defined elsewhere
+// For example:
+// function lightenDarkenColor(col, amt) { ... }
+// function drawPixelRect(ctx, x, y, w, h, color) { ... }
+// const Config = { CANVAS_WIDTH: 800, CANVAS_HEIGHT: 600, UI_TYPEWRITER_SPEED: 2, UI_PANEL_INTRO_SPEED: 5, STOP_LINKS: {}, DEBUG_MODE: false };
+// const Palettes = { ui: { FRAME_DARK: '#101010', FRAME_LIGHT: '#404040', FRAME_HIGHLIGHT: '#606060', BUTTON_F_KEY_BG: '#303030', BUTTON_F_KEY_FG: '#FFFFFF', MINIMAP_TEXTURE: '#203020', MINIMAP_PLAYER: '#00FF00', MINIMAP_STOP_DEFAULT: '#FF0000', MINIMAP_STOP_GAMING: '#FF00FF', MINIMAP_STOP_FUTURISTIC: '#00FFFF', MINIMAP_STOP_INDUSTRIAL: '#FFA500' } };
+// const PixelFontData = { charHeight: 5, charSpacing: 1, lineHeight: 7, DEFAULT_CHAR_WIDTH: 3, 'F': [[1,1,1],[1,0,0],[1,1,0],[1,0,0],[1,0,0]], '?': [[1,1,0],[0,1,0],[0,1,0],[0,0,0],[0,1,0]] };
+// const StopsManager = { getCurrentZone: () => null, activeStop: null, stops: [], zoneEntryLeadDistance: 1000 };
