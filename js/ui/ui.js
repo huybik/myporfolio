@@ -34,6 +34,14 @@ class UI {
     this.showDriveInstruction = true; // To control visibility of the initial instruction
     this.adjacentZones = { previous: null, next: null }; // To store zone info
 
+    // New properties for zone title
+    this.currentZoneName = "";
+    this.zoneTitleAlpha = 0;
+    this.zoneTitleDisplayTime = 0;
+    this.ZONE_TITLE_FADE_IN_TIME = 0.5; // seconds
+    this.ZONE_TITLE_STAY_TIME = 2.0; // seconds
+    this.ZONE_TITLE_FADE_OUT_TIME = 1.0; // seconds
+
     if (Config.DEBUG_MODE) console.log("UI initialized.");
   }
 
@@ -52,6 +60,46 @@ class UI {
     this.adjacentZones = StopsManager.getAdjacentZones(this.game.world.worldX);
 
     const currentZone = StopsManager.getCurrentZone(this.game.world.worldX);
+
+    // Zone Title Logic
+    if (currentZone && this.currentZoneName !== currentZone.name) {
+      this.currentZoneName = currentZone.name;
+      this.zoneTitleDisplayTime =
+        this.ZONE_TITLE_FADE_IN_TIME +
+        this.ZONE_TITLE_STAY_TIME +
+        this.ZONE_TITLE_FADE_OUT_TIME;
+    }
+
+    if (this.zoneTitleDisplayTime > 0) {
+      this.zoneTitleDisplayTime -= deltaTime;
+      const totalDuration =
+        this.ZONE_TITLE_FADE_IN_TIME +
+        this.ZONE_TITLE_STAY_TIME +
+        this.ZONE_TITLE_FADE_OUT_TIME;
+      const timeSinceStart = totalDuration - this.zoneTitleDisplayTime;
+
+      if (timeSinceStart < this.ZONE_TITLE_FADE_IN_TIME) {
+        // Fading in
+        this.zoneTitleAlpha = timeSinceStart / this.ZONE_TITLE_FADE_IN_TIME;
+      } else if (
+        timeSinceStart <
+        this.ZONE_TITLE_FADE_IN_TIME + this.ZONE_TITLE_STAY_TIME
+      ) {
+        // Staying
+        this.zoneTitleAlpha = 1.0;
+      } else {
+        // Fading out
+        const fadeOutProgress =
+          (timeSinceStart -
+            (this.ZONE_TITLE_FADE_IN_TIME + this.ZONE_TITLE_STAY_TIME)) /
+          this.ZONE_TITLE_FADE_OUT_TIME;
+        this.zoneTitleAlpha = 1.0 - fadeOutProgress;
+      }
+      this.zoneTitleAlpha = Math.max(0, Math.min(1, this.zoneTitleAlpha));
+    } else {
+      this.zoneTitleAlpha = 0;
+    }
+
     let newTargetText = "Portfolio Drive";
     if (currentZone) {
       if (
@@ -159,6 +207,46 @@ class UI {
       drawPixelText(ctx, text, xPos, yPos, "#FFFFFF", textScale);
       ctx.globalAlpha = 1.0;
     }
+  }
+
+  renderZoneTitle(ctx) {
+    if (this.zoneTitleAlpha <= 0) return;
+
+    ctx.globalAlpha = this.zoneTitleAlpha;
+
+    const text = this.currentZoneName;
+    const textScale = 5;
+    const color = "#FFFFFF";
+    const shadowColor = "rgba(0, 0, 0, 0.5)";
+
+    // Calculate text width
+    let textWidth = 0;
+    for (let char of text.toUpperCase()) {
+      const charData = PixelFontData[char] || PixelFontData["?"];
+      textWidth +=
+        (charData[0] ? charData[0].length : PixelFontData.DEFAULT_CHAR_WIDTH) *
+        textScale;
+      textWidth += PixelFontData.fontSettings.charSpacing * textScale;
+    }
+    textWidth -= PixelFontData.fontSettings.charSpacing * textScale;
+
+    const xPos = (Config.CANVAS_WIDTH - textWidth) / 2;
+    const yPos = 40;
+    const shadowOffset = 4;
+
+    // Draw shadow
+    drawPixelText(
+      ctx,
+      text,
+      xPos + shadowOffset,
+      yPos + shadowOffset,
+      shadowColor,
+      textScale
+    );
+    // Draw text
+    drawPixelText(ctx, text, xPos, yPos, color, textScale);
+
+    ctx.globalAlpha = 1.0;
   }
 
   render(ctx) {
@@ -291,6 +379,9 @@ class UI {
 
     // Render adjacent zone labels
     this.renderAdjacentZoneLabels(ctx);
+
+    // Render the new zone title
+    this.renderZoneTitle(ctx);
 
     // Render drive instruction if needed
     if (this.showDriveInstruction) {
