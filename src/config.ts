@@ -11,8 +11,8 @@ export const Config = {
   },
   DEBUG_MODE: false, // Set to true for debug info
   STOP_LINKS: {
-    project_ai_game: "https://example.com/ai-game-project",
-    project_ai_ta: "https://example.com/ai-ta-project",
+    project_ai_game: "https://simulafun.vercel.app/",
+    project_ai_ta: "https://learnshouldfun.vercel.app/",
     project_truck_parts: "https://example.com/truck-parts-project",
   },
   PLAYER_DUST_EMIT_THRESHOLD: 1.0,
