@@ -8,7 +8,17 @@ export const Input = {
   init() {
     window.addEventListener("keydown", (e) => this.handleKeyDown(e));
     window.addEventListener("keyup", (e) => this.handleKeyUp(e));
+    window.addEventListener("blur", () => this.handleBlur());
     if (Config.DEBUG_MODE) console.log("Input system initialized.");
+  },
+
+  handleBlur() {
+    // When the window loses focus, reset all key states to prevent keys being "stuck"
+    // when the user tabs away and back to the game. This fixes issues where a key-up
+    // event is missed, causing the game to think a key is still pressed.
+    this.keys = {};
+    this.lastPressed = {};
+    if (Config.DEBUG_MODE) console.log("Window blurred, input state reset.");
   },
 
   handleKeyDown(e: KeyboardEvent) {
