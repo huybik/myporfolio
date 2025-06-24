@@ -46,7 +46,7 @@ export class UI {
     this.backgroundColor = "rgba(10, 20, 10, 0.85)";
     this.textColor = "#B0E0B0";
     this.fontSettings = { ...PixelFontData.fontSettings, scale: 2 };
-    this.infoScreenWidth = 350;
+    this.infoScreenWidth = 374;
     this.infoScreenHeight = 28;
     this.infoScreenX = (Config.CANVAS_WIDTH - this.infoScreenWidth) / 2;
     this.infoScreenY =
