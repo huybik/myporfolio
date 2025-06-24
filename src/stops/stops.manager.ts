@@ -65,7 +65,7 @@ export const StopsManager = {
         id: "end_of_the_road",
         worldPositionX: initialStopPosition + 3 * distanceBetweenStops,
         theme: "industrial", // Keep the theme from the last zone
-        promptText: "The end of the road. Turn back.",
+        promptText: "The end of the road.",
         markerAssetFunction: "drawEndStopSign",
         markerScreenYOffset: 0,
         isReached: false,
