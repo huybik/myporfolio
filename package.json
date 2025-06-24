@@ -8,7 +8,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "test": "vitest",
-    "test:report": "vitest run --reporter=default --reporter=junit --outputFile=vitest-report.junit"
+    "test:report": "vitest run --reporter=default --reporter=json --outputFile=vitest-report.json && node scripts/extract-vitest-failures.js"
   },
   "devDependencies": {
     "typescript": "^5.8.3",

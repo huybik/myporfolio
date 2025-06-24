@@ -1,3 +1,6 @@
 prompt.xml
 /dist
 /node_modules
+vitest-report.junit
+vitest-report.json
+vitest-failures.json
