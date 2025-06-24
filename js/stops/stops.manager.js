@@ -6,8 +6,8 @@ const StopsManager = {
   zoneEntryLeadDistance: Config.CANVAS_WIDTH * 1.25,
 
   init() {
-    const initialStopPosition = 2500;
-    const distanceBetweenStops = 4500;
+    const initialStopPosition = 1500;
+    const distanceBetweenStops = 2000;
 
     this.stops = [
       {
