@@ -140,5 +140,75 @@ const StopsManager = {
     }
     return currentZone;
   },
+
+  getAdjacentZones(worldCurrentX) {
+    const getZoneName = (stop) => {
+      if (!stop) return null;
+      return `${
+        stop.theme.charAt(0).toUpperCase() + stop.theme.slice(1)
+      } Sector`;
+    };
+    const desertZoneName = "The Long Road";
+
+    // Find the next stop boundary
+    let nextBoundary = Infinity;
+    let nextZoneName = null;
+    for (const stop of this.stops) {
+      const boundary = stop.worldPositionX - this.zoneEntryLeadDistance;
+      if (boundary > worldCurrentX) {
+        nextBoundary = boundary;
+        nextZoneName = getZoneName(stop);
+        break;
+      }
+    }
+
+    // Find the previous stop boundary
+    let prevBoundary = -Infinity;
+    let prevZoneName = null;
+    let prevStopIndex = -1;
+    for (let i = this.stops.length - 1; i >= 0; i--) {
+      const stop = this.stops[i];
+      const boundary = stop.worldPositionX - this.zoneEntryLeadDistance;
+      if (boundary <= worldCurrentX) {
+        prevBoundary = boundary;
+        prevStopIndex = i;
+        break;
+      }
+    }
+
+    if (prevStopIndex === -1) {
+      // We are in the initial desert zone
+      prevZoneName = null;
+    } else if (prevStopIndex === 0) {
+      // We are in the first stop's zone
+      prevZoneName = desertZoneName;
+    } else {
+      // We are in a later stop's zone
+      prevZoneName = getZoneName(this.stops[prevStopIndex - 1]);
+    }
+
+    const fadeDistance = Config.CANVAS_WIDTH * 2.5;
+
+    const distanceToNext = nextBoundary - worldCurrentX;
+    const distancePastPrev = worldCurrentX - prevBoundary;
+
+    let nextZoneInfo = null;
+    if (nextZoneName && distanceToNext < fadeDistance) {
+      nextZoneInfo = {
+        name: nextZoneName,
+        alpha: Math.max(0, 1.0 - distanceToNext / fadeDistance),
+      };
+    }
+
+    let prevZoneInfo = null;
+    if (prevZoneName && distancePastPrev < fadeDistance) {
+      prevZoneInfo = {
+        name: prevZoneName,
+        alpha: Math.max(0, 1.0 - distancePastPrev / fadeDistance),
+      };
+    }
+
+    return { previous: prevZoneInfo, next: nextZoneInfo };
+  },
 };
 StopsManager.init();

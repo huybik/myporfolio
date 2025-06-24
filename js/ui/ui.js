@@ -32,6 +32,7 @@ class UI {
     this.fKeyIcon = UIRenderer.createFKeyIcon(this.fontSettings);
 
     this.showDriveInstruction = true; // To control visibility of the initial instruction
+    this.adjacentZones = { previous: null, next: null }; // To store zone info
 
     if (Config.DEBUG_MODE) console.log("UI initialized.");
   }
@@ -46,6 +47,9 @@ class UI {
       this.panelYOffset -= this.panelIntroSpeed * (60 * deltaTime);
       if (this.panelYOffset < 0) this.panelYOffset = 0;
     }
+
+    // Get adjacent zone info from StopsManager
+    this.adjacentZones = StopsManager.getAdjacentZones(this.game.world.worldX);
 
     const currentZone = StopsManager.getCurrentZone(this.game.world.worldX);
     let newTargetText = "Portfolio Drive";
@@ -118,6 +122,43 @@ class UI {
     UIRenderer.drawRightArrow(ctx, arrowX, arrowY, arrowSize, "#FFFFFF");
 
     ctx.globalAlpha = 1.0;
+  }
+
+  renderAdjacentZoneLabels(ctx) {
+    const textScale = 2.5;
+    const yPos = Config.CANVAS_HEIGHT / 2 - 80;
+    const animOffset = ((Math.sin(this.game.gameTime * 4) + 1) / 2) * 5;
+
+    // Render Next Zone label on the right
+    if (this.adjacentZones.next && this.adjacentZones.next.alpha > 0) {
+      ctx.globalAlpha = this.adjacentZones.next.alpha * 0.8; // Apply fade
+      const text = `${this.adjacentZones.next.name} -->`;
+
+      // Calculate text width
+      let textWidth = 0;
+      for (let char of text.toUpperCase()) {
+        const charData = PixelFontData[char] || PixelFontData["?"];
+        textWidth +=
+          (charData[0]
+            ? charData[0].length
+            : PixelFontData.DEFAULT_CHAR_WIDTH) * textScale;
+        textWidth += PixelFontData.fontSettings.charSpacing * textScale;
+      }
+      textWidth -= PixelFontData.fontSettings.charSpacing * textScale;
+
+      const xPos = Config.CANVAS_WIDTH - textWidth - 30 + animOffset;
+      drawPixelText(ctx, text, xPos, yPos, "#FFFFFF", textScale);
+      ctx.globalAlpha = 1.0;
+    }
+
+    // Render Previous Zone label on the left
+    if (this.adjacentZones.previous && this.adjacentZones.previous.alpha > 0) {
+      ctx.globalAlpha = this.adjacentZones.previous.alpha * 0.8; // Apply fade
+      const text = `<-- ${this.adjacentZones.previous.name}`;
+      const xPos = 30 - animOffset;
+      drawPixelText(ctx, text, xPos, yPos, "#FFFFFF", textScale);
+      ctx.globalAlpha = 1.0;
+    }
   }
 
   render(ctx) {
@@ -247,6 +288,9 @@ class UI {
 
     UIRenderer.drawStatusLights(ctx, this, actualYPosition);
     UIRenderer.drawMiniMap(ctx, this, actualYPosition);
+
+    // Render adjacent zone labels
+    this.renderAdjacentZoneLabels(ctx);
 
     // Render drive instruction if needed
     if (this.showDriveInstruction) {

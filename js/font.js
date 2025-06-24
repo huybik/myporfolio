@@ -350,6 +350,21 @@ const PixelFontData = {
     [0, 0, 1],
     [0, 1, 1],
   ],
+  // NEWLY ADDED CHARACTERS
+  "<": [
+    [0, 0, 1],
+    [0, 1, 0],
+    [1, 0, 0],
+    [0, 1, 0],
+    [0, 0, 1],
+  ],
+  ">": [
+    [1, 0, 0],
+    [0, 1, 0],
+    [0, 0, 1],
+    [0, 1, 0],
+    [1, 0, 0],
+  ],
   DEFAULT_CHAR_WIDTH: 4,
   DEFAULT_CHAR_HEIGHT: 5,
 };
