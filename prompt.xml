@@ -10,7 +10,7 @@
   </head>
   <body>
     <div id="game-container">
-      <canvas id="gameCanvas"></canvas>
+      <canvas id="gameCanvas" tabindex="0"></canvas>
     </div>
     <!-- Core Dependencies -->
     <script src="js/config.js"></script>
@@ -141,6 +141,11 @@ canvas {
   image-rendering: pixelated; /* Ensures crisp pixels */
   image-rendering: -moz-crisp-edges;
   image-rendering: crisp-edges;
+}
+
+/* Hide the default focus outline on the canvas for a cleaner look */
+canvas:focus {
+  outline: none;
 }
 
 /* Example for a custom pixel font if loaded via CSS */
@@ -737,6 +742,9 @@ class Game {
     this.ctx.mozImageSmoothingEnabled = false;
     this.ctx.webkitImageSmoothingEnabled = false;
     this.ctx.msImageSmoothingEnabled = false;
+
+    // Auto-focus the canvas to capture keyboard input immediately on page load
+    this.canvas.focus();
 
     this.player = new Player(this);
     this.world = new World(this);

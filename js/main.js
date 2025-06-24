@@ -48,6 +48,27 @@ class Game {
     );
     this.ui.update(deltaTime);
     EffectsManager.update(deltaTime);
+
+    // Handle global interactions
+    this.handleGlobalInput();
+  }
+
+  handleGlobalInput() {
+    // Open the link for the current zone when the interact key is pressed.
+    if (Input.isInteractJustPressed()) {
+      const currentZone = StopsManager.getCurrentZone(this.world.worldX);
+      if (currentZone && currentZone.stopId) {
+        const linkURL = Config.STOP_LINKS[currentZone.stopId];
+        if (linkURL) {
+          if (Config.DEBUG_MODE) {
+            console.log(
+              `Zone interaction: opening URL for ${currentZone.stopId}: ${linkURL}`
+            );
+          }
+          window.open(linkURL, "_blank");
+        }
+      }
+    }
   }
 
   render() {

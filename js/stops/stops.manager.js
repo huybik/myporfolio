@@ -54,17 +54,8 @@ const StopsManager = {
       );
       if (distanceToStopMarker < this.stopActivationRange / 2) {
         this.activeStop = stop;
-        if (Input.isInteractJustPressed()) {
-          const linkURL = Config.STOP_LINKS[stop.id];
-          if (linkURL) {
-            if (Config.DEBUG_MODE) {
-              console.log(
-                `Interacting with stop: ${stop.promptText}, opening URL: ${linkURL}`
-              );
-            }
-            window.open(linkURL, "_blank");
-          }
-        }
+        // Interaction logic is now handled globally in main.js to allow
+        // opening URLs even when not directly at the stop marker.
         break;
       }
     }
