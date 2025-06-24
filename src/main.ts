@@ -29,12 +29,6 @@ class Game implements IGame {
     this.frameCount = 0;
 
     this.init();
-
-    // The following lines were the cause of the error.
-    // They were overwriting the initialized properties from init() with null.
-    // this.player = null!;
-    // this.world = null!;
-    // this.ui = null!;
   }
 
   init() {
@@ -46,7 +40,6 @@ class Game implements IGame {
     Input.init();
     StopsManager.init();
 
-    // Pass `this` (the game instance) to classes that need it
     this.player = new Player(this);
     this.world = new World(this);
     this.ui = new UI(this);
@@ -73,7 +66,7 @@ class Game implements IGame {
   }
 
   handleGlobalInput() {
-    if (Input.isInteractJustPressed()) {
+    if (Input.isJustPressed("INTERACT")) {
       const currentZone = StopsManager.getCurrentZone(this.world.worldX);
       if (currentZone && currentZone.stopId) {
         const linkURL =
@@ -135,6 +128,4 @@ class Game implements IGame {
   }
 }
 
-// The script is loaded as a module, so it runs automatically.
-// No need for window.onload.
 new Game();

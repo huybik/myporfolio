@@ -3,7 +3,7 @@ import { Config } from "./config";
 
 export const Input = {
   keys: {} as Record<string, boolean>,
-  lastPressed: {} as Record<string, boolean>, // For detecting single presses
+  lastPressed: {} as Record<string, boolean>,
 
   init() {
     window.addEventListener("keydown", (e) => this.handleKeyDown(e));
@@ -13,7 +13,6 @@ export const Input = {
 
   handleKeyDown(e: KeyboardEvent) {
     if (!this.keys[e.key]) {
-      // Only set lastPressed on initial press
       this.lastPressed[e.key] = true;
     }
     this.keys[e.key] = true;
@@ -21,7 +20,7 @@ export const Input = {
 
   handleKeyUp(e: KeyboardEvent) {
     this.keys[e.key] = false;
-    this.lastPressed[e.key] = false; // Clear lastPressed on key up
+    this.lastPressed[e.key] = false;
   },
 
   isPressed(action: keyof typeof Config.KeyBindings): boolean {
@@ -37,7 +36,7 @@ export const Input = {
     if (boundKeys) {
       for (const key of boundKeys) {
         if (this.keys[key] && this.lastPressed[key]) {
-          this.lastPressed[key] = false; // Consume the "just pressed" state
+          this.lastPressed[key] = false;
           return true;
         }
       }
@@ -54,12 +53,10 @@ export const Input = {
   },
 
   isInteractPressed(): boolean {
-    // This will now be for continuous press if needed
     return this.isPressed("INTERACT");
   },
 
   isInteractJustPressed(): boolean {
-    // For single action
     return this.isJustPressed("INTERACT");
   },
 
