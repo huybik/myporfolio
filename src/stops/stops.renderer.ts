@@ -2,6 +2,7 @@
 import { Palettes } from "../palettes";
 import { drawPixelRect, interpolateColor, lightenDarkenColor } from "../utils";
 import { getRandomColor, getRandomInt } from "../utils";
+import { drawPixelText } from "../font"; // Import drawPixelText
 
 export const StopsRenderer = {
   drawDefaultMarker: (
@@ -587,6 +588,88 @@ export const StopsRenderer = {
         themePalette.emissive[1]
       );
       ctx.globalAlpha = 1.0;
+    }
+  },
+
+  // --- NEW RENDERER FUNCTION ---
+  drawEndStopSign: (
+    ctx: CanvasRenderingContext2D,
+    x: number,
+    y: number,
+    isActive: boolean,
+    gameTime = 0
+  ) => {
+    const poleWidth = 6;
+    const poleHeight = 60;
+    const signSize = 32;
+    const signY = y - poleHeight;
+
+    // Draw pole
+    drawPixelRect(
+      ctx,
+      x - poleWidth / 2,
+      y - poleHeight,
+      poleWidth,
+      poleHeight,
+      "#606060"
+    );
+    drawPixelRect(
+      ctx,
+      x - poleWidth / 2 + 1,
+      y - poleHeight,
+      poleWidth / 2,
+      poleHeight,
+      "#707070"
+    );
+
+    // Draw sign octagon
+    const s = signSize / 2;
+    const o = s * 0.414; // Offset for octagon corners
+    const signColor = "#B00000";
+    const borderColor = "#FFFFFF";
+
+    ctx.fillStyle = borderColor;
+    ctx.beginPath();
+    ctx.moveTo(x - s + o, signY - s);
+    ctx.lineTo(x + s - o, signY - s);
+    ctx.lineTo(x + s, signY - s + o);
+    ctx.lineTo(x + s, signY + s - o);
+    ctx.lineTo(x + s - o, signY + s);
+    ctx.lineTo(x - s + o, signY + s);
+    ctx.lineTo(x - s, signY + s - o);
+    ctx.lineTo(x - s, signY - s + o);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.fillStyle = signColor;
+    const innerSignSize = signSize - 4;
+    const is = innerSignSize / 2;
+    const io = is * 0.414;
+    ctx.beginPath();
+    ctx.moveTo(x - is + io, signY - is);
+    ctx.lineTo(x + is - io, signY - is);
+    ctx.lineTo(x + is, signY - is + io);
+    ctx.lineTo(x + is, signY + is - io);
+    ctx.lineTo(x + is - io, signY + is);
+    ctx.lineTo(x - is + io, signY + is);
+    ctx.lineTo(x - is, signY + is - io);
+    ctx.lineTo(x - is, signY - is + io);
+    ctx.closePath();
+    ctx.fill();
+
+    // Draw "STOP" text
+    drawPixelText(ctx, "STOP", x - 18, signY - 6, "#FFFFFF", 2);
+
+    // Add flashing lights if active
+    if (isActive) {
+      const lightOn = Math.floor(gameTime * 4) % 2 === 0;
+      if (lightOn) {
+        const lightColor = "#FF0000";
+        drawPixelRect(ctx, x - 4, signY - s - 8, 8, 4, lightColor);
+        ctx.globalAlpha = 0.3;
+        drawPixelRect(ctx, x - 6, signY - s - 10, 12, 8, lightColor);
+        ctx.globalAlpha = 1.0;
+      }
     }
   },
 };

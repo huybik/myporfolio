@@ -7,6 +7,7 @@ import { Particle } from "../effects/particle";
 import { Palettes } from "../palettes";
 import { getRandomColor, getRandomFloat, getRandomInt } from "../utils";
 import { IGame } from "../types";
+import { StopsManager } from "../stops/stops.manager"; // Import StopsManager
 
 export class Player {
   game: IGame;
@@ -66,6 +67,14 @@ export class Player {
   }
 
   update(deltaTime: number) {
+    // --- START OF END STOP LOGIC ---
+    const playerWorldX = this.game.world.worldX + this.screenX;
+    const endStopBrakingFactor = (StopsManager as any).getEndStopBrakingFactor(
+      playerWorldX
+    );
+    const atEndStop = (StopsManager as any).isPlayerAtEndStop(playerWorldX);
+    // --- END OF END STOP LOGIC ---
+
     let movingIntent = 0;
     if (Input.isMoveRightPressed()) {
       movingIntent = 1;
@@ -99,6 +108,25 @@ export class Player {
         }
         if (this.currentSpeed > 0) this.currentSpeed = 0;
       }
+    }
+
+    // --- APPLY END STOP BRAKING ---
+    if (endStopBrakingFactor > 0 && this.currentSpeed > 0) {
+      // Apply a deceleration force that ramps up as the player gets closer.
+      // This will counteract acceleration and natural deceleration.
+      const endBrakingForce =
+        endStopBrakingFactor * (this.brakingDeceleration + this.acceleration);
+      this.currentSpeed -= endBrakingForce;
+    }
+
+    // --- APPLY HARD STOP ---
+    if (atEndStop && this.currentSpeed > 0) {
+      this.currentSpeed = 0;
+    }
+
+    // Final check to ensure speed doesn't become erroneously small
+    if (Math.abs(this.currentSpeed) < 0.01) {
+      this.currentSpeed = 0;
     }
 
     let targetTilt = 0;

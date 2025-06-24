@@ -26,6 +26,7 @@ export const StopsManager = {
   activeStop: null as Stop | null,
   stopActivationRange: 120,
   zoneEntryLeadDistance: Config.CANVAS_WIDTH * 1.25,
+  endStopSlowingDistance: 500, // The distance before the end stop where the car starts to slow down.
 
   init() {
     const initialStopPosition = 1500;
@@ -36,7 +37,7 @@ export const StopsManager = {
         id: "project_ai_game",
         worldPositionX: initialStopPosition,
         theme: "gaming",
-        promptText: "AI Game Project- F to Enter",
+        promptText: "Press [F] to see the AI Game Project",
         markerAssetFunction: "drawArcadeCabinet",
         markerScreenYOffset: 0,
         isReached: false,
@@ -45,7 +46,7 @@ export const StopsManager = {
         id: "project_ai_ta",
         worldPositionX: initialStopPosition + distanceBetweenStops,
         theme: "futuristic",
-        promptText: "AI TA Project- F to Enter",
+        promptText: "Press [F] to see the AI TA Project",
         markerAssetFunction: "drawHolographicTerminal",
         markerScreenYOffset: 0,
         isReached: false,
@@ -54,8 +55,18 @@ export const StopsManager = {
         id: "project_truck_parts",
         worldPositionX: initialStopPosition + 2 * distanceBetweenStops,
         theme: "industrial",
-        promptText: "Auto Parts Project- F to Enter",
+        promptText: "Press [F] to see the Auto Parts Project",
         markerAssetFunction: "drawPixelWarehouse",
+        markerScreenYOffset: 0,
+        isReached: false,
+      },
+      // --- NEW END STOP ---
+      {
+        id: "end_of_the_road",
+        worldPositionX: initialStopPosition + 3 * distanceBetweenStops,
+        theme: "industrial", // Keep the theme from the last zone
+        promptText: "The end of the road. Turn back.",
+        markerAssetFunction: "drawEndStopSign",
         markerScreenYOffset: 0,
         isReached: false,
       },
@@ -66,11 +77,37 @@ export const StopsManager = {
       );
   },
 
+  // --- NEW FUNCTION ---
+  getEndStopBrakingFactor(playerWorldX: number): number {
+    const endStop = this.stops.find((s) => s.id === "end_of_the_road");
+    if (!endStop) return 0;
+
+    const distanceToStop = endStop.worldPositionX - playerWorldX;
+    if (distanceToStop > this.endStopSlowingDistance || distanceToStop < 0) {
+      return 0;
+    }
+
+    // Player is in the slowing zone. Calculate a factor from 0 to 1.
+    const progressIntoZone = 1 - distanceToStop / this.endStopSlowingDistance;
+    return Math.max(0, Math.min(1, progressIntoZone));
+  },
+
+  // --- NEW FUNCTION ---
+  isPlayerAtEndStop(playerWorldX: number): boolean {
+    const endStop = this.stops.find((s) => s.id === "end_of_the_road");
+    if (!endStop) return false;
+
+    return playerWorldX >= endStop.worldPositionX;
+  },
+
   update(worldCurrentX: number, playerScreenX: number, playerWidth: number) {
     this.activeStop = null;
     const playerWorldCenterX = worldCurrentX + playerScreenX + playerWidth / 2;
 
     for (const stop of this.stops) {
+      // The end stop doesn't need to be "activated" in the same way for links.
+      if (stop.id === "end_of_the_road") continue;
+
       const distanceToStopMarker = Math.abs(
         playerWorldCenterX - stop.worldPositionX
       );
@@ -94,16 +131,26 @@ export const StopsManager = {
         stopScreenX < Config.CANVAS_WIDTH + this.stopActivationRange * 3
       ) {
         const markerY = playerGroundY + stop.markerScreenYOffset;
-        const isActiveMarker = !!(
-          this.activeStop && this.activeStop.id === stop.id
-        );
+
+        // For the end stop, "isActive" can mean the player is in the slowing zone.
+        const isSlowing =
+          this.getEndStopBrakingFactor(
+            worldCurrentX + Config.CANVAS_WIDTH / 2
+          ) > 0;
+        const isActiveMarker =
+          !!(this.activeStop && this.activeStop.id === stop.id) ||
+          (stop.id === "end_of_the_road" && isSlowing);
 
         const rendererFunc =
           StopsRenderer[stop.markerAssetFunction] ||
           StopsRenderer.drawDefaultMarker;
         rendererFunc(ctx, stopScreenX, markerY, isActiveMarker, gameTime);
 
-        if (Config.DEBUG_MODE && isActiveMarker) {
+        if (
+          Config.DEBUG_MODE &&
+          isActiveMarker &&
+          stop.id !== "end_of_the_road"
+        ) {
           ctx.strokeStyle = "yellow";
           ctx.lineWidth = 1;
           const debugRadius = this.stopActivationRange / 2;
@@ -169,6 +216,8 @@ export const StopsManager = {
   getAdjacentZones(worldCurrentX: number) {
     const getZoneName = (stop: Stop | undefined) => {
       if (!stop) return null;
+      // Don't show "End Of The Road Sector" as a next zone.
+      if (stop.id === "end_of_the_road") return null;
       return `${
         stop.theme.charAt(0).toUpperCase() + stop.theme.slice(1)
       } Sector`;
