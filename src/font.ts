@@ -1,22 +1,29 @@
-// js/font.js
+// src/font.ts
+import { drawPixelRect } from "./utils";
+
+// Define a type for the font settings for clarity
+interface FontSettings {
+  charHeight: number;
+  charSpacing: number;
+  lineHeight: number;
+}
 
 // I.1.C Custom Pixel Font (Bitmap Font simulation)
-function drawPixelText(
-  ctx,
-  text,
-  startX,
-  startY,
-  color,
+export function drawPixelText(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  startX: number,
+  startY: number,
+  color: string,
   scale = 1,
-  customFontSettings = PixelFontData.fontSettings
-) {
+  customFontSettings: FontSettings = PixelFontData.fontSettings
+): number {
   ctx.fillStyle = color;
   let currentX = startX;
-  const charHeight = customFontSettings.charHeight * scale;
 
   for (let char of text.toUpperCase()) {
     // Assuming font data is uppercase
-    const charData = PixelFontData[char] || PixelFontData["?"]; // Fallback to '?'
+    const charData = (PixelFontData as any)[char] || PixelFontData["?"]; // Fallback to '?'
     const charWidth =
       (charData[0] ? charData[0].length : PixelFontData.DEFAULT_CHAR_WIDTH) *
       scale;
@@ -47,7 +54,7 @@ function drawPixelText(
   return currentX; // Return end X for potential chaining
 }
 
-const PixelFontData = {
+export const PixelFontData = {
   fontSettings: {
     charHeight: 5,
     charSpacing: 1,

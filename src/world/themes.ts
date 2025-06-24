@@ -1,5 +1,7 @@
-// js/world/themes.js
-const WorldThemes = {
+// src/world/themes.ts
+import { LayerConfig } from "./generators";
+
+export const WorldThemes: { [key: string]: LayerConfig[] } = {
   desert_start: [
     {
       type: "stars_far",
@@ -28,7 +30,6 @@ const WorldThemes = {
       count: 10,
       generator: "generateDesertDistant",
       options: {
-        colorBase: Palettes.desert.objects_primary.shadow,
         heightRange: [80, 150],
       },
     },
@@ -81,10 +82,6 @@ const WorldThemes = {
       count: 15,
       generator: "generatePixelCloud",
       options: {
-        colors: [
-          Palettes.gaming.sky[1],
-          lightenDarkenColor(Palettes.gaming.sky[1], 20),
-        ],
         sizeRange: [30, 80],
       },
     },
@@ -134,12 +131,6 @@ const WorldThemes = {
       speed: 0.03,
       count: 5,
       generator: "generateNebula",
-      options: {
-        colors: [
-          Palettes.futuristic.sky[2] + "33",
-          Palettes.futuristic.emissive[1] + "22",
-        ],
-      },
     },
     {
       type: "celestial",
@@ -187,7 +178,6 @@ const WorldThemes = {
       count: 10,
       generator: "generatePixelCloud",
       options: {
-        colors: [Palettes.industrial.smoke[0], Palettes.industrial.sky[2]],
         sizeRange: [80, 150],
         yPosRange: [0.3, 0.6],
       },
@@ -198,7 +188,6 @@ const WorldThemes = {
       count: 12,
       generator: "generatePixelCloud",
       options: {
-        colors: [Palettes.industrial.smoke[1], Palettes.industrial.smoke[2]],
         sizeRange: [60, 120],
         yPosRange: [0.1, 0.4],
       },

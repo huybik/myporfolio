@@ -1,5 +1,5 @@
-// js/config.js
-const Config = {
+// src/config.ts
+export const Config = {
   CANVAS_WIDTH: 800,
   CANVAS_HEIGHT: 600,
   TARGET_FPS: 60,

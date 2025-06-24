@@ -1,6 +1,34 @@
-// js/world/generators.js
-const WorldGenerators = {
-  generateStar(x, y, layerConfig, game, world) {
+// src/world/generators.ts
+import { Config } from "../config";
+import { Palettes } from "../palettes";
+import {
+  getRandomColor,
+  getRandomFloat,
+  getRandomInt,
+  lightenDarkenColor,
+} from "../utils";
+import { World } from "./world";
+import { WorldElement } from "./renderer";
+import { IGame } from "../types";
+
+// A type for the layer configuration passed to generators
+export interface LayerConfig {
+  type: string;
+  options?: { [key: string]: any };
+  [key: string]: any;
+}
+
+// A generic generator function type
+export type ElementGenerator = (
+  x: number,
+  y: number,
+  layerConfig: LayerConfig,
+  game: IGame,
+  world: World
+) => WorldElement;
+
+export const WorldGenerators: { [key: string]: ElementGenerator } = {
+  generateStar(x, y, layerConfig): WorldElement {
     const options = layerConfig.options || {};
     const sizeArray = options.sizes || [1, 1];
     const size = getRandomInt(sizeArray[0], sizeArray[1]);
@@ -17,14 +45,14 @@ const WorldGenerators = {
       blinkPhase: getRandomFloat(0, Math.PI * 2),
       originalColor: starColor,
       canRandomizeYOnWrap: true,
-      update: function (deltaTime, gameTime) {
+      update: function (_deltaTime: number, gameTime: number) {
         this.blinkFactor =
           (Math.sin(gameTime * this.blinkRate + this.blinkPhase) + 1) / 2;
       },
     };
   },
 
-  generateCelestialBody(x, y, layerConfig, game, world) {
+  generateCelestialBody(x, y, layerConfig): WorldElement {
     const options = layerConfig.options || {};
     const type = options.type || "sun";
     let radius, color, glowColor;
@@ -66,7 +94,7 @@ const WorldGenerators = {
     };
   },
 
-  generatePixelCloud(x, y, layerConfig, game, world) {
+  generatePixelCloud(x, _y, layerConfig, _game, world): WorldElement {
     const options = layerConfig.options || {};
     const sizeRange = options.sizeRange || [20, 50];
     const cloudWidth = getRandomInt(sizeRange[0], sizeRange[1]);
@@ -89,7 +117,7 @@ const WorldGenerators = {
     };
   },
 
-  generateNebula(x, y, layerConfig, game, world) {
+  generateNebula(x, y, layerConfig): WorldElement {
     const options = layerConfig.options || {};
     const nebulaColors = options.colors || [
       Palettes.futuristic.sky[2] + "33",
@@ -109,7 +137,7 @@ const WorldGenerators = {
     };
   },
 
-  generateDesertDistant(x, y, layerConfig, game, world) {
+  generateDesertDistant(x, _y, layerConfig, _game, world): WorldElement {
     const options = layerConfig.options || {};
     const heightRange = options.heightRange || [50, 100];
     const width = getRandomInt(30, 70);
@@ -127,10 +155,10 @@ const WorldGenerators = {
     };
   },
 
-  generateDesertMid(x, y, layerConfig, game, world) {
+  generateDesertMid(x, _y, layerConfig, _game, world): WorldElement {
     const options = layerConfig.options || {};
     const r = Math.random();
-    let element;
+    let element: WorldElement;
 
     if (options.type === "mesa" || (options.type === "mixed" && r < 0.4)) {
       const mesaWidth = getRandomInt(60, 150);
@@ -173,7 +201,7 @@ const WorldGenerators = {
     return element;
   },
 
-  generateDesertGround(x, y, layerConfig, game, world) {
+  generateDesertGround(x, _y, _layerConfig, _game, world): WorldElement {
     const baseColor = Palettes.desert.ground[0];
     const detailColors = [Palettes.desert.ground[2], Palettes.desert.ground[3]];
     const segmentWidth = Config.CANVAS_WIDTH * 0.5 + getRandomInt(0, 20);
@@ -191,10 +219,10 @@ const WorldGenerators = {
     };
   },
 
-  generateForegroundDebris(x, y, layerConfig, game, world) {
+  generateForegroundDebris(x, y, layerConfig): WorldElement {
     const options = layerConfig.options || { types: ["rock"] };
     const type = getRandomColor(options.types);
-    let element = {
+    let element: WorldElement = {
       type: "debris",
       x: x,
       y: y,
@@ -255,13 +283,13 @@ const WorldGenerators = {
         element.size = getRandomInt(7, 10);
         break;
     }
-    element.originalColor = element.color;
+    element.originalColor = element.color!;
     return element;
   },
 
-  generateGamingDistant(x, y, layerConfig, game, world) {
+  generateGamingDistant(x, _y, _layerConfig, _game, world): WorldElement {
     const r = Math.random();
-    let element;
+    let element: WorldElement;
     if (r < 0.5) {
       const width = getRandomInt(30, 60);
       const height = getRandomInt(80, Config.CANVAS_HEIGHT * 0.5);
@@ -307,9 +335,9 @@ const WorldGenerators = {
     return element;
   },
 
-  generateGamingMid(x, y, layerConfig, game, world) {
+  generateGamingMid(x, _y, _layerConfig, _game, world): WorldElement {
     const r = Math.random();
-    let element;
+    let element: WorldElement;
     if (r < 0.4) {
       const trunkHeight = getRandomInt(10, 25);
       const leavesHeight = getRandomInt(20, 40);
@@ -320,6 +348,7 @@ const WorldGenerators = {
         y: world.groundLevelY - trunkHeight - leavesHeight,
         trunkWidth: getRandomInt(4, 8),
         trunkHeight: trunkHeight,
+        leavesWidth: leavesWidth,
         trunkColor: Palettes.desert.objects_accent[0],
         leavesColor: Palettes.gaming.ground[0],
         leavesHighlight: Palettes.gaming.ground[2],
@@ -361,7 +390,7 @@ const WorldGenerators = {
     return element;
   },
 
-  generateGamingGround(x, y, layerConfig, game, world) {
+  generateGamingGround(x, _y, _layerConfig, _game, world): WorldElement {
     const segmentWidth = 40;
     const colorIndex = Math.floor(x / segmentWidth) % 2;
     const baseColor = Palettes.gaming.ground[colorIndex];
@@ -384,7 +413,7 @@ const WorldGenerators = {
     };
   },
 
-  generateFuturisticSkyElement(x, y, layerConfig, game, world) {
+  generateFuturisticSkyElement(x, _y, _layerConfig): WorldElement {
     const r = Math.random();
     if (r < 0.7) {
       const width = getRandomInt(15, 40);
@@ -424,7 +453,7 @@ const WorldGenerators = {
     }
   },
 
-  generateFuturisticDistant(x, y, layerConfig, game, world) {
+  generateFuturisticDistant(x, _y, _layerConfig, _game, world): WorldElement {
     const buildingWidth = getRandomInt(40, 90);
     const buildingHeight = getRandomInt(150, Config.CANVAS_HEIGHT * 0.7);
     return {
@@ -440,7 +469,7 @@ const WorldGenerators = {
     };
   },
 
-  generateFuturisticMid(x, y, layerConfig, game, world) {
+  generateFuturisticMid(x, _y, _layerConfig, _game, world): WorldElement {
     const r = Math.random();
     if (r < 0.6) {
       const platWidth = getRandomInt(50, 120);
@@ -478,7 +507,7 @@ const WorldGenerators = {
     }
   },
 
-  generateFuturisticGround(x, y, layerConfig, game, world) {
+  generateFuturisticGround(x, _y, _layerConfig, _game, world): WorldElement {
     const panelWidth = 80;
     const colorIndex = Math.floor(x / panelWidth) % 3;
     const baseColor =
@@ -504,7 +533,7 @@ const WorldGenerators = {
     };
   },
 
-  generateIndustrialDistant(x, y, layerConfig, game, world) {
+  generateIndustrialDistant(x, _y, layerConfig, _game, world): WorldElement {
     const options = layerConfig.options || {};
     const buildingWidth = getRandomInt(70, 150);
     const buildingHeight = getRandomInt(100, Config.CANVAS_HEIGHT * 0.5);
@@ -525,9 +554,9 @@ const WorldGenerators = {
     };
   },
 
-  generateIndustrialMid(x, y, layerConfig, game, world) {
+  generateIndustrialMid(x, _y, _layerConfig, _game, world): WorldElement {
     const r = Math.random();
-    let element;
+    let element: WorldElement;
     if (r < 0.4) {
       const size = getRandomInt(15, 30);
       const crateColor = getRandomColor(Palettes.industrial.objects_accent);
@@ -572,7 +601,7 @@ const WorldGenerators = {
     return element;
   },
 
-  generateIndustrialGround(x, y, layerConfig, game, world) {
+  generateIndustrialGround(x, _y, _layerConfig, _game, world): WorldElement {
     const r = Math.random();
     let baseColor;
     if (r < 0.6) baseColor = Palettes.industrial.ground[0];

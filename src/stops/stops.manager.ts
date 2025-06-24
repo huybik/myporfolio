@@ -1,7 +1,29 @@
-// js/stops/stops.manager.js
-const StopsManager = {
-  stops: [],
-  activeStop: null,
+// src/stops/stops.manager.ts
+import { Config } from "../config";
+import { Palettes } from "../palettes";
+import { StopsRenderer } from "./stops.renderer";
+
+export interface Stop {
+  id: string;
+  worldPositionX: number;
+  theme: string;
+  promptText: string;
+  markerAssetFunction: keyof typeof StopsRenderer;
+  markerScreenYOffset: number;
+  isReached: boolean;
+}
+
+export interface Zone {
+  name: string;
+  theme: string;
+  skyColor: string;
+  promptText: string;
+  stopId: string | null;
+}
+
+export const StopsManager = {
+  stops: [] as Stop[],
+  activeStop: null as Stop | null,
   stopActivationRange: 120,
   zoneEntryLeadDistance: Config.CANVAS_WIDTH * 1.25,
 
@@ -14,8 +36,8 @@ const StopsManager = {
         id: "project_ai_game",
         worldPositionX: initialStopPosition,
         theme: "gaming",
-        promptText: "AI Game Project-[F] to Enter",
-        markerAssetFunction: "drawArcadeCabinet", // Use string name
+        promptText: "AI Game Project- F to Enter",
+        markerAssetFunction: "drawArcadeCabinet",
         markerScreenYOffset: 0,
         isReached: false,
       },
@@ -23,8 +45,8 @@ const StopsManager = {
         id: "project_ai_ta",
         worldPositionX: initialStopPosition + distanceBetweenStops,
         theme: "futuristic",
-        promptText: "AI TA Project-[F] to Enter",
-        markerAssetFunction: "drawHolographicTerminal", // Use string name
+        promptText: "AI TA Project- F to Enter",
+        markerAssetFunction: "drawHolographicTerminal",
         markerScreenYOffset: 0,
         isReached: false,
       },
@@ -32,8 +54,8 @@ const StopsManager = {
         id: "project_truck_parts",
         worldPositionX: initialStopPosition + 2 * distanceBetweenStops,
         theme: "industrial",
-        promptText: "Auto Parts Project-[F] to Enter",
-        markerAssetFunction: "drawPixelWarehouse", // Use string name
+        promptText: "Auto Parts Project- F to Enter",
+        markerAssetFunction: "drawPixelWarehouse",
         markerScreenYOffset: 0,
         isReached: false,
       },
@@ -44,7 +66,7 @@ const StopsManager = {
       );
   },
 
-  update(worldCurrentX, playerScreenX, playerWidth, game) {
+  update(worldCurrentX: number, playerScreenX: number, playerWidth: number) {
     this.activeStop = null;
     const playerWorldCenterX = worldCurrentX + playerScreenX + playerWidth / 2;
 
@@ -54,14 +76,17 @@ const StopsManager = {
       );
       if (distanceToStopMarker < this.stopActivationRange / 2) {
         this.activeStop = stop;
-        // Interaction logic is now handled globally in main.js to allow
-        // opening URLs even when not directly at the stop marker.
         break;
       }
     }
   },
 
-  render(ctx, worldCurrentX, playerGroundY, gameTime) {
+  render(
+    ctx: CanvasRenderingContext2D,
+    worldCurrentX: number,
+    playerGroundY: number,
+    gameTime: number
+  ) {
     this.stops.forEach((stop) => {
       const stopScreenX = stop.worldPositionX - worldCurrentX;
       if (
@@ -69,8 +94,9 @@ const StopsManager = {
         stopScreenX < Config.CANVAS_WIDTH + this.stopActivationRange * 3
       ) {
         const markerY = playerGroundY + stop.markerScreenYOffset;
-        const isActiveMarker =
-          this.activeStop && this.activeStop.id === stop.id;
+        const isActiveMarker = !!(
+          this.activeStop && this.activeStop.id === stop.id
+        );
 
         const rendererFunc =
           StopsRenderer[stop.markerAssetFunction] ||
@@ -95,11 +121,11 @@ const StopsManager = {
     });
   },
 
-  getCurrentZone(worldCurrentX) {
-    let currentZone = {
+  getCurrentZone(worldCurrentX: number): Zone {
+    let currentZone: Zone = {
       name: "The Long Road",
       theme: "desert_start",
-      skyColor: (Palettes.desert.sky && Palettes.desert.sky[0]) || "#FAD7A0",
+      skyColor: Palettes.desert.sky[0],
       promptText: "Portfolio Drive",
       stopId: null,
     };
@@ -109,13 +135,13 @@ const StopsManager = {
       const zoneStartPos = stop.worldPositionX - this.zoneEntryLeadDistance;
 
       if (worldCurrentX >= zoneStartPos) {
-        let themePalette = Palettes[stop.theme] || Palettes.desert;
+        const themePalette = (Palettes as any)[stop.theme] || Palettes.desert;
         currentZone = {
           name: `${
             stop.theme.charAt(0).toUpperCase() + stop.theme.slice(1)
           } Sector`,
           theme: stop.theme,
-          skyColor: (themePalette.sky && themePalette.sky[0]) || "#87CEEB",
+          skyColor: themePalette.sky[0] || "#87CEEB",
           promptText: stop.promptText,
           stopId: stop.id,
         };
@@ -131,8 +157,7 @@ const StopsManager = {
         currentZone = {
           name: "Desert Approach",
           theme: "desert_start",
-          skyColor:
-            (Palettes.desert.sky && Palettes.desert.sky[0]) || "#FAD7A0",
+          skyColor: Palettes.desert.sky[0],
           promptText: "The Journey Begins...",
           stopId: null,
         };
@@ -141,8 +166,8 @@ const StopsManager = {
     return currentZone;
   },
 
-  getAdjacentZones(worldCurrentX) {
-    const getZoneName = (stop) => {
+  getAdjacentZones(worldCurrentX: number) {
+    const getZoneName = (stop: Stop | undefined) => {
       if (!stop) return null;
       return `${
         stop.theme.charAt(0).toUpperCase() + stop.theme.slice(1)
@@ -150,9 +175,8 @@ const StopsManager = {
     };
     const desertZoneName = "The Long Road";
 
-    // Find the next stop boundary
     let nextBoundary = Infinity;
-    let nextZoneName = null;
+    let nextZoneName: string | null = null;
     for (const stop of this.stops) {
       const boundary = stop.worldPositionX - this.zoneEntryLeadDistance;
       if (boundary > worldCurrentX) {
@@ -162,9 +186,8 @@ const StopsManager = {
       }
     }
 
-    // Find the previous stop boundary
     let prevBoundary = -Infinity;
-    let prevZoneName = null;
+    let prevZoneName: string | null = null;
     let prevStopIndex = -1;
     for (let i = this.stops.length - 1; i >= 0; i--) {
       const stop = this.stops[i];
@@ -177,18 +200,14 @@ const StopsManager = {
     }
 
     if (prevStopIndex === -1) {
-      // We are in the initial desert zone
       prevZoneName = null;
     } else if (prevStopIndex === 0) {
-      // We are in the first stop's zone
       prevZoneName = desertZoneName;
     } else {
-      // We are in a later stop's zone
       prevZoneName = getZoneName(this.stops[prevStopIndex - 1]);
     }
 
     const fadeDistance = Config.CANVAS_WIDTH * 2.5;
-
     const distanceToNext = nextBoundary - worldCurrentX;
     const distancePastPrev = worldCurrentX - prevBoundary;
 
@@ -211,4 +230,3 @@ const StopsManager = {
     return { previous: prevZoneInfo, next: nextZoneInfo };
   },
 };
-StopsManager.init();

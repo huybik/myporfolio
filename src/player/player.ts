@@ -1,6 +1,38 @@
-// js/player/player.js
-class Player {
-  constructor(game) {
+// src/player/player.ts
+import { Config } from "../config";
+import { Input } from "../input";
+import { PlayerRenderer } from "./playerRenderer";
+import { EffectsManager } from "../effects/effectsManager";
+import { Particle } from "../effects/particle";
+import { Palettes } from "../palettes";
+import { getRandomColor, getRandomFloat, getRandomInt } from "../utils";
+import { IGame } from "../types";
+
+export class Player {
+  game: IGame;
+  width: number;
+  height: number;
+  screenX: number;
+  screenY: number;
+  bobAngle: number;
+  bobSpeed: number;
+  bobAmplitude: number;
+  wheelFrame: number;
+  wheelAnimationSpeed: number;
+  wheelRadius: number;
+  currentSpeed: number;
+  maxSpeed: number;
+  acceleration: number;
+  deceleration: number;
+  brakingDeceleration: number;
+  effectiveY: number;
+  tiltAngle: number;
+  maxTilt: number;
+  tiltSpeed: number;
+  headlightsOn: boolean;
+  isBraking: boolean;
+
+  constructor(game: IGame) {
     this.game = game;
     this.width = 72;
     this.height = 36;
@@ -33,8 +65,8 @@ class Player {
     if (Config.DEBUG_MODE) console.log("Player initialized.");
   }
 
-  update(deltaTime) {
-    let movingIntent = 0; // -1 for left, 1 for right, 0 for no input
+  update(deltaTime: number) {
+    let movingIntent = 0;
     if (Input.isMoveRightPressed()) {
       movingIntent = 1;
     }
@@ -50,7 +82,6 @@ class Player {
         Math.min(this.maxSpeed, this.currentSpeed)
       );
     } else {
-      // Decelerate or brake
       if (this.currentSpeed > 0) {
         if (Input.isMoveLeftPressed()) {
           this.currentSpeed -= this.brakingDeceleration;
@@ -70,7 +101,6 @@ class Player {
       }
     }
 
-    // Tilt logic
     let targetTilt = 0;
     if (this.currentSpeed > 0.1 && movingIntent === 1)
       targetTilt = -this.maxTilt;
@@ -82,7 +112,6 @@ class Player {
     this.tiltAngle +=
       (targetTilt - this.tiltAngle) * this.tiltSpeed * (60 * deltaTime);
 
-    // Bobbing
     this.bobAngle +=
       this.bobSpeed *
       (Math.abs(this.currentSpeed) / this.maxSpeed + 0.1) *
@@ -93,7 +122,6 @@ class Player {
       (Math.abs(this.currentSpeed) > 0.1 ? 1 : 0.5);
     this.effectiveY = this.screenY + bobOffset;
 
-    // Wheel animation
     if (Math.abs(this.currentSpeed) > 0.1) {
       this.wheelFrame +=
         this.wheelAnimationSpeed *
@@ -103,12 +131,10 @@ class Player {
       if (this.wheelFrame < 0) this.wheelFrame = 7;
     }
 
-    // Headlight toggle
     if (Input.isToggleHeadlightsJustPressed()) {
       this.headlightsOn = !this.headlightsOn;
     }
 
-    // Particle Emission
     this.emitDustParticles();
     this.emitExhaustParticles();
     this.emitSpeedLines();
@@ -205,8 +231,7 @@ class Player {
     }
   }
 
-  render(ctx) {
-    // All rendering is now delegated to the PlayerRenderer
+  render(ctx: CanvasRenderingContext2D) {
     PlayerRenderer.render(ctx, this);
   }
 }

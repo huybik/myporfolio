@@ -4,43 +4,12 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Portfolio Drive</title>
-    <link rel="stylesheet" href="style.css" />
+    <link rel="stylesheet" href="/src/style.css" />
   </head>
   <body>
     <div id="game-container">
       <canvas id="gameCanvas" tabindex="0"></canvas>
     </div>
-    <!-- Core Dependencies -->
-    <script src="js/config.js"></script>
-    <script src="js/utils.js"></script>
-    <script src="js/palettes.js"></script>
-    <script src="js/font.js"></script>
-
-    <!-- Game Modules -->
-    <script src="js/effects/particle.js"></script>
-    <script src="js/effects/effects.manager.js"></script>
-    <script src="js/input.js"></script>
-
-    <!-- Player -->
-    <script src="js/player/player.renderer.js"></script>
-    <script src="js/player/player.js"></script>
-
-    <!-- World -->
-    <script src="js/world/renderer.js"></script>
-    <script src="js/world/generators.js"></script>
-    <script src="js/world/themes.js"></script>
-    <script src="js/world/parallax.js"></script>
-    <script src="js/world/world.js"></script>
-
-    <!-- Stops -->
-    <script src="js/stops/stops.renderer.js"></script>
-    <script src="js/stops/stops.manager.js"></script>
-
-    <!-- UI -->
-    <script src="js/ui/ui.renderer.js"></script>
-    <script src="js/ui/ui.js"></script>
-
-    <!-- Main Game Loop -->
-    <script src="js/main.js"></script>
+    <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

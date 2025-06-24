@@ -1,13 +1,21 @@
-// js/player/player.renderer.js
-const PlayerRenderer = {
-  // I.1.A Player Vehicle: Refined Pixel Art Assets
-  // I.1.C Wheel Rotation (More Frames)
-  drawWheel(ctx, x, y, radius, frame) {
+// src/player/playerRenderer.ts
+import { Player } from "./player";
+import { Palettes } from "../palettes";
+import { drawPixelRect } from "../utils";
+import { lightenDarkenColor } from "../utils";
+import { Config } from "../config";
+
+export const PlayerRenderer = {
+  drawWheel(
+    ctx: CanvasRenderingContext2D,
+    x: number,
+    y: number,
+    radius: number,
+    frame: number
+  ) {
     const wheelColors = Palettes.vehicle;
-    // Simplified 8-frame rotation (4 unique designs, mirrored or slightly shifted for 8)
     const currentFrame = Math.floor(frame) % 8;
 
-    // Tire
     drawPixelRect(
       ctx,
       x - radius,
@@ -25,7 +33,6 @@ const PlayerRenderer = {
       wheelColors.CAR_TIRE_LIGHT
     );
 
-    // Hubcap
     const hubRadius = radius * 0.6;
     drawPixelRect(
       ctx,
@@ -44,13 +51,11 @@ const PlayerRenderer = {
       lightenDarkenColor(wheelColors.CAR_BODY_ACCENT, 20)
     );
 
-    // Spokes (example for 8 frames)
     ctx.strokeStyle = wheelColors.CAR_TIRE_DARK;
     ctx.lineWidth = Math.max(1, Math.floor(radius / 4));
 
-    const angleOffset = (Math.PI / 4) * currentFrame; // For 8 spokes/positions
+    const angleOffset = (Math.PI / 4) * currentFrame;
     for (let i = 0; i < 2; i++) {
-      // Two main spokes, 90 deg apart
       const angle = angleOffset + (i * Math.PI) / 2;
       const startX = x + Math.cos(angle) * hubRadius * 0.5;
       const startY = y + Math.sin(angle) * hubRadius * 0.5;
@@ -63,29 +68,25 @@ const PlayerRenderer = {
     }
   },
 
-  render(ctx, player) {
+  render(ctx: CanvasRenderingContext2D, player: Player) {
     const carX = player.screenX;
-    // I.1.C Suspension Bobbing: Body uses effectiveY, wheels use a non-bobbing Y.
     const bodyY = player.effectiveY;
-    const wheelBaseY = player.screenY + player.height - player.wheelRadius; // Non-bobbing Y for wheels
+    const wheelBaseY = player.screenY + player.height - player.wheelRadius;
 
     const carColors = Palettes.vehicle;
 
-    // Apply tilt - this is a simplified approach.
     const frontTiltOffset = Math.sin(player.tiltAngle) * (player.width / 2);
     const rearTiltOffset = -Math.sin(player.tiltAngle) * (player.width / 2);
 
-    // Player Shadow (I.2.B)
     drawPixelRect(
       ctx,
       carX + 5,
-      wheelBaseY + player.wheelRadius - 3, // Positioned under the wheels
+      wheelBaseY + player.wheelRadius - 3,
       player.width - 10,
-      6, // Shadow height
+      6,
       "rgba(0, 0, 0, 0.2)"
     );
 
-    // Wheels (drawn first, at non-bobbing Y)
     const frontWheelX = carX + player.width * 0.2;
     const rearWheelX = carX + player.width * 0.8 - player.wheelRadius * 2;
 
@@ -104,7 +105,6 @@ const PlayerRenderer = {
       player.wheelFrame
     );
 
-    // Car Body - More detailed pixel art car (I.1.A)
     const mainBodyHeight = player.height * 0.65;
     drawPixelRect(
       ctx,
@@ -114,7 +114,6 @@ const PlayerRenderer = {
       mainBodyHeight,
       carColors.CAR_BODY_MAIN
     );
-    // Highlight on body
     drawPixelRect(
       ctx,
       carX + player.width * 0.1,
@@ -124,7 +123,6 @@ const PlayerRenderer = {
       lightenDarkenColor(carColors.CAR_BODY_MAIN, 20)
     );
 
-    // 3. Cabin/Windows
     const cabinHeight = player.height * 0.5;
     const cabinWidth = player.width * 0.6;
     const cabinX = carX + player.width * 0.2;
@@ -137,12 +135,10 @@ const PlayerRenderer = {
       cabinWidth,
       cabinHeight,
       carColors.CAR_ROOF
-    ); // Cabin structure first
+    );
 
-    // Windows (inset within cabin structure)
     const windowInset = 4;
     const windowHeight = cabinHeight - windowInset * 1.5;
-    // Windshield (slanted)
     ctx.fillStyle = carColors.CAR_WINDOW;
     ctx.beginPath();
     ctx.moveTo(cabinX + windowInset + cabinWidth * 0.3, cabinY + windowInset);
@@ -152,7 +148,6 @@ const PlayerRenderer = {
     ctx.closePath();
     ctx.fill();
 
-    // Side Window
     drawPixelRect(
       ctx,
       cabinX + cabinWidth * 0.45,
@@ -162,7 +157,6 @@ const PlayerRenderer = {
       carColors.CAR_WINDOW
     );
 
-    // Pillars (A, B)
     drawPixelRect(
       ctx,
       cabinX + cabinWidth * 0.35,
@@ -170,9 +164,8 @@ const PlayerRenderer = {
       5,
       windowHeight,
       carColors.CAR_ROOF
-    ); // B-Pillar
+    );
 
-    // 4. Roof
     drawPixelRect(ctx, cabinX, cabinY - 5, cabinWidth, 5, carColors.CAR_ROOF);
     drawPixelRect(
       ctx,
@@ -183,9 +176,7 @@ const PlayerRenderer = {
       lightenDarkenColor(carColors.CAR_ROOF, 15)
     );
 
-    // Headlights & Taillights (I.1.D)
     const lightSize = { w: 6, h: 4 };
-    // Headlights
     const headlightY = bodyY + player.height * 0.25 + frontTiltOffset;
     if (player.headlightsOn) {
       drawPixelRect(
@@ -196,7 +187,6 @@ const PlayerRenderer = {
         lightSize.h,
         carColors.CAR_HEADLIGHT_ON
       );
-      // Optional light cone (very simple)
       ctx.globalAlpha = 0.1;
       ctx.fillStyle = carColors.CAR_HEADLIGHT_ON;
       ctx.beginPath();
@@ -217,7 +207,6 @@ const PlayerRenderer = {
       );
     }
 
-    // Taillights
     const taillightY = bodyY + player.height * 0.25 + rearTiltOffset;
     let taillightColor = player.isBraking
       ? carColors.CAR_TAILLIGHT_BRAKE
@@ -237,7 +226,6 @@ const PlayerRenderer = {
       (player.headlightsOn || player.isBraking) &&
       taillightColor !== carColors.CAR_TAILLIGHT_OFF
     ) {
-      // Optional glow for taillights
       ctx.globalAlpha = 0.2;
       drawPixelRect(
         ctx,
@@ -255,7 +243,7 @@ const PlayerRenderer = {
       ctx.lineWidth = 1;
       ctx.strokeRect(
         Math.floor(carX),
-        Math.floor(bodyY), // Use bodyY for debug rect
+        Math.floor(bodyY),
         player.width,
         player.height
       );

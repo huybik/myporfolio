@@ -1,67 +1,87 @@
-// js/ui/ui.js
-class UI {
-  constructor(game) {
+// src/ui/ui.ts
+import { Config } from "../config";
+import { Input } from "../input";
+import { StopsManager } from "../stops/stops.manager";
+import { UIRenderer } from "./ui.renderer";
+import { drawPixelText, PixelFontData } from "../font";
+import { drawPixelRect } from "../utils";
+import { IGame } from "../types";
+
+export class UI {
+  game: IGame;
+  height: number;
+  yPosition: number;
+  backgroundColor: string;
+  textColor: string;
+  fontSettings: {
+    scale: number;
+    charHeight: number;
+    charSpacing: number;
+    lineHeight: number;
+  };
+  infoScreenWidth: number;
+  infoScreenHeight: number;
+  infoScreenX: number;
+  infoScreenY: number;
+  infoScreenColor: string;
+  displayedText: string;
+  targetText: string;
+  typewriterIndex: number;
+  typewriterFrameCounter: number;
+  panelYOffset: number;
+  fKeyIcon: HTMLCanvasElement;
+  showDriveInstruction: boolean;
+  adjacentZones: { previous: any; next: any };
+  currentZoneName: string;
+  zoneTitleAlpha: number;
+  zoneTitleDisplayTime: number;
+  ZONE_TITLE_FADE_IN_TIME: number;
+  ZONE_TITLE_STAY_TIME: number;
+  ZONE_TITLE_FADE_OUT_TIME: number;
+
+  constructor(game: IGame) {
     this.game = game;
     this.height = 60;
     this.yPosition = Config.CANVAS_HEIGHT - this.height;
     this.backgroundColor = "rgba(10, 20, 10, 0.85)";
-    this.borderColor = Palettes.ui.FRAME_DARK;
     this.textColor = "#B0E0B0";
-
-    this.fontSettings = {
-      ...PixelFontData.fontSettings,
-      scale: 2,
-    };
-
+    this.fontSettings = { ...PixelFontData.fontSettings, scale: 2 };
     this.infoScreenWidth = 350;
     this.infoScreenHeight = 28;
     this.infoScreenX = (Config.CANVAS_WIDTH - this.infoScreenWidth) / 2;
     this.infoScreenY =
       this.yPosition + (this.height - this.infoScreenHeight) / 2 - 5;
     this.infoScreenColor = "rgba(20, 40, 20, 0.9)";
-    this.infoScreenBorderColor = Palettes.ui.FRAME_LIGHT;
-
     this.displayedText = "";
     this.targetText = "";
     this.typewriterIndex = 0;
     this.typewriterFrameCounter = 0;
-
     this.panelYOffset = this.height;
-    this.panelIntroSpeed = Config.UI_PANEL_INTRO_SPEED;
-
     this.fKeyIcon = UIRenderer.createFKeyIcon(this.fontSettings);
-
-    this.showDriveInstruction = true; // To control visibility of the initial instruction
-    this.adjacentZones = { previous: null, next: null }; // To store zone info
-
-    // New properties for zone title
+    this.showDriveInstruction = true;
+    this.adjacentZones = { previous: null, next: null };
     this.currentZoneName = "";
     this.zoneTitleAlpha = 0;
     this.zoneTitleDisplayTime = 0;
-    this.ZONE_TITLE_FADE_IN_TIME = 0.5; // seconds
-    this.ZONE_TITLE_STAY_TIME = 2.0; // seconds
-    this.ZONE_TITLE_FADE_OUT_TIME = 1.0; // seconds
+    this.ZONE_TITLE_FADE_IN_TIME = 0.5;
+    this.ZONE_TITLE_STAY_TIME = 2.0;
+    this.ZONE_TITLE_FADE_OUT_TIME = 1.0;
 
     if (Config.DEBUG_MODE) console.log("UI initialized.");
   }
 
-  update(deltaTime) {
-    // Hide the initial drive instruction once the player moves right
+  update(deltaTime: number) {
     if (this.showDriveInstruction && Input.isMoveRightPressed()) {
       this.showDriveInstruction = false;
     }
-
     if (this.panelYOffset > 0) {
-      this.panelYOffset -= this.panelIntroSpeed * (60 * deltaTime);
+      this.panelYOffset -= Config.UI_PANEL_INTRO_SPEED * (60 * deltaTime);
       if (this.panelYOffset < 0) this.panelYOffset = 0;
     }
 
-    // Get adjacent zone info from StopsManager
     this.adjacentZones = StopsManager.getAdjacentZones(this.game.world.worldX);
-
     const currentZone = StopsManager.getCurrentZone(this.game.world.worldX);
 
-    // Zone Title Logic
     if (currentZone && this.currentZoneName !== currentZone.name) {
       this.currentZoneName = currentZone.name;
       this.zoneTitleDisplayTime =
@@ -79,16 +99,13 @@ class UI {
       const timeSinceStart = totalDuration - this.zoneTitleDisplayTime;
 
       if (timeSinceStart < this.ZONE_TITLE_FADE_IN_TIME) {
-        // Fading in
         this.zoneTitleAlpha = timeSinceStart / this.ZONE_TITLE_FADE_IN_TIME;
       } else if (
         timeSinceStart <
         this.ZONE_TITLE_FADE_IN_TIME + this.ZONE_TITLE_STAY_TIME
       ) {
-        // Staying
         this.zoneTitleAlpha = 1.0;
       } else {
-        // Fading out
         const fadeOutProgress =
           (timeSinceStart -
             (this.ZONE_TITLE_FADE_IN_TIME + this.ZONE_TITLE_STAY_TIME)) /
@@ -104,7 +121,9 @@ class UI {
     if (currentZone) {
       if (
         StopsManager.activeStop &&
-        Config.STOP_LINKS[StopsManager.activeStop.id]
+        Config.STOP_LINKS[
+          StopsManager.activeStop.id as keyof typeof Config.STOP_LINKS
+        ]
       ) {
         newTargetText = `${StopsManager.activeStop.promptText}`;
       } else if (currentZone.promptText) {
@@ -114,9 +133,9 @@ class UI {
 
     if (this.targetText !== newTargetText) {
       this.targetText = newTargetText;
-      this.displayedText = "";
       this.typewriterIndex = 0;
       this.typewriterFrameCounter = 0;
+      this.displayedText = "";
     }
 
     if (this.typewriterIndex < this.targetText.length) {
@@ -134,7 +153,7 @@ class UI {
     }
   }
 
-  renderDriveInstruction(ctx) {
+  renderDriveInstruction(ctx: CanvasRenderingContext2D) {
     const animOffset = ((Math.sin(this.game.gameTime * 6) + 1) / 2) * 8;
     const alpha = 0.75 + ((Math.sin(this.game.gameTime * 6) + 1) / 2) * 0.25;
     ctx.globalAlpha = alpha;
@@ -142,10 +161,9 @@ class UI {
     const text = "USE RIGHT ARROW TO DRIVE";
     const textScale = 3;
 
-    // Accurate text width calculation
     let textWidth = 0;
     for (let char of text.toUpperCase()) {
-      const charData = PixelFontData[char] || PixelFontData["?"];
+      const charData = (PixelFontData as any)[char] || PixelFontData["?"];
       textWidth +=
         (charData[0] ? charData[0].length : PixelFontData.DEFAULT_CHAR_WIDTH) *
         textScale;
@@ -155,11 +173,9 @@ class UI {
 
     const arrowSize = 30;
     const padding = 20;
-
     const totalWidth = textWidth + padding + arrowSize;
     const startX = Config.CANVAS_WIDTH - totalWidth - 60;
     const startY = Config.CANVAS_HEIGHT / 2 - 50;
-
     const textY =
       startY +
       (arrowSize - PixelFontData.fontSettings.charHeight * textScale) / 2;
@@ -172,20 +188,17 @@ class UI {
     ctx.globalAlpha = 1.0;
   }
 
-  renderAdjacentZoneLabels(ctx) {
+  renderAdjacentZoneLabels(ctx: CanvasRenderingContext2D) {
     const textScale = 2.5;
     const yPos = Config.CANVAS_HEIGHT / 2 - 80;
     const animOffset = ((Math.sin(this.game.gameTime * 4) + 1) / 2) * 5;
 
-    // Render Next Zone label on the right
     if (this.adjacentZones.next && this.adjacentZones.next.alpha > 0) {
-      ctx.globalAlpha = this.adjacentZones.next.alpha * 0.8; // Apply fade
+      ctx.globalAlpha = this.adjacentZones.next.alpha * 0.8;
       const text = `${this.adjacentZones.next.name} -->`;
-
-      // Calculate text width
       let textWidth = 0;
       for (let char of text.toUpperCase()) {
-        const charData = PixelFontData[char] || PixelFontData["?"];
+        const charData = (PixelFontData as any)[char] || PixelFontData["?"];
         textWidth +=
           (charData[0]
             ? charData[0].length
@@ -193,15 +206,13 @@ class UI {
         textWidth += PixelFontData.fontSettings.charSpacing * textScale;
       }
       textWidth -= PixelFontData.fontSettings.charSpacing * textScale;
-
       const xPos = Config.CANVAS_WIDTH - textWidth - 30 + animOffset;
       drawPixelText(ctx, text, xPos, yPos, "#FFFFFF", textScale);
       ctx.globalAlpha = 1.0;
     }
 
-    // Render Previous Zone label on the left
     if (this.adjacentZones.previous && this.adjacentZones.previous.alpha > 0) {
-      ctx.globalAlpha = this.adjacentZones.previous.alpha * 0.8; // Apply fade
+      ctx.globalAlpha = this.adjacentZones.previous.alpha * 0.8;
       const text = `<-- ${this.adjacentZones.previous.name}`;
       const xPos = 30 - animOffset;
       drawPixelText(ctx, text, xPos, yPos, "#FFFFFF", textScale);
@@ -209,32 +220,25 @@ class UI {
     }
   }
 
-  renderZoneTitle(ctx) {
+  renderZoneTitle(ctx: CanvasRenderingContext2D) {
     if (this.zoneTitleAlpha <= 0) return;
-
     ctx.globalAlpha = this.zoneTitleAlpha;
-
     const text = this.currentZoneName;
     const textScale = 5;
     const color = "#FFFFFF";
     const shadowColor = "rgba(0, 0, 0, 0.5)";
-
-    // Calculate text width
     let textWidth = 0;
     for (let char of text.toUpperCase()) {
-      const charData = PixelFontData[char] || PixelFontData["?"];
+      const charData = (PixelFontData as any)[char] || PixelFontData["?"];
       textWidth +=
         (charData[0] ? charData[0].length : PixelFontData.DEFAULT_CHAR_WIDTH) *
         textScale;
       textWidth += PixelFontData.fontSettings.charSpacing * textScale;
     }
     textWidth -= PixelFontData.fontSettings.charSpacing * textScale;
-
     const xPos = (Config.CANVAS_WIDTH - textWidth) / 2;
     const yPos = 40;
     const shadowOffset = 4;
-
-    // Draw shadow
     drawPixelText(
       ctx,
       text,
@@ -243,15 +247,12 @@ class UI {
       shadowColor,
       textScale
     );
-    // Draw text
     drawPixelText(ctx, text, xPos, yPos, color, textScale);
-
     ctx.globalAlpha = 1.0;
   }
 
-  render(ctx) {
+  render(ctx: CanvasRenderingContext2D) {
     const actualYPosition = this.yPosition + this.panelYOffset;
-
     drawPixelRect(
       ctx,
       0,
@@ -267,7 +268,6 @@ class UI {
       Config.CANVAS_WIDTH,
       this.height
     );
-
     UIRenderer.drawPixelArtFrame(
       ctx,
       this.infoScreenX,
@@ -290,31 +290,30 @@ class UI {
       5 +
       this.infoScreenHeight / 2 -
       (this.fontSettings.charHeight * this.fontSettings.scale) / 2;
-
     let textToRender = this.displayedText;
     let textWidth = 0;
     for (let char of textToRender.toUpperCase()) {
-      const charData = PixelFontData[char] || PixelFontData["?"];
+      const charData = (PixelFontData as any)[char] || PixelFontData["?"];
       textWidth +=
         (charData[0] ? charData[0].length : PixelFontData.DEFAULT_CHAR_WIDTH) *
         this.fontSettings.scale;
       textWidth += this.fontSettings.charSpacing * this.fontSettings.scale;
     }
     textWidth -= this.fontSettings.charSpacing * this.fontSettings.scale;
-
     const textStartX =
       this.infoScreenX + (this.infoScreenWidth - textWidth) / 2;
 
     let hasInteractivePromptThisFrame =
       StopsManager.activeStop &&
-      Config.STOP_LINKS[StopsManager.activeStop.id] &&
+      Config.STOP_LINKS[
+        StopsManager.activeStop.id as keyof typeof Config.STOP_LINKS
+      ] &&
       textToRender.includes("[F]");
 
     if (hasInteractivePromptThisFrame) {
       const fKeyIndex = textToRender.indexOf("[F]");
       const preText = textToRender.substring(0, fKeyIndex);
       const postText = textToRender.substring(fKeyIndex + 3);
-
       let currentX = drawPixelText(
         ctx,
         preText,
@@ -324,7 +323,6 @@ class UI {
         this.fontSettings.scale,
         this.fontSettings
       );
-
       const iconY =
         textY -
         (this.fKeyIcon.height -
@@ -334,7 +332,6 @@ class UI {
       currentX +=
         this.fKeyIcon.width +
         this.fontSettings.charSpacing * this.fontSettings.scale;
-
       drawPixelText(
         ctx,
         postText,
@@ -376,14 +373,9 @@ class UI {
 
     UIRenderer.drawStatusLights(ctx, this, actualYPosition);
     UIRenderer.drawMiniMap(ctx, this, actualYPosition);
-
-    // Render adjacent zone labels
     this.renderAdjacentZoneLabels(ctx);
-
-    // Render the new zone title
     this.renderZoneTitle(ctx);
 
-    // Render drive instruction if needed
     if (this.showDriveInstruction) {
       this.renderDriveInstruction(ctx);
     }

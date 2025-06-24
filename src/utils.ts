@@ -1,5 +1,13 @@
-// js/utils.js
-function drawPixelRect(ctx, x, y, width, height, color) {
+// src/utils.ts
+
+export function drawPixelRect(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  color: string
+) {
   ctx.fillStyle = color;
   ctx.fillRect(
     Math.floor(x),
@@ -9,7 +17,13 @@ function drawPixelRect(ctx, x, y, width, height, color) {
   );
 }
 
-function drawPixel(ctx, x, y, color, pixelSize = 1) {
+export function drawPixel(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  color: string,
+  pixelSize = 1
+) {
   ctx.fillStyle = color;
   ctx.fillRect(
     Math.floor(x * pixelSize),
@@ -19,17 +33,17 @@ function drawPixel(ctx, x, y, color, pixelSize = 1) {
   );
 }
 
-function getRandomInt(min, max) {
+export function getRandomInt(min: number, max: number): number {
   min = Math.ceil(min);
   max = Math.floor(max);
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
-function getRandomFloat(min, max) {
+export function getRandomFloat(min: number, max: number): number {
   return Math.random() * (max - min) + min;
 }
 
-function getRandomColor(paletteArray) {
+export function getRandomColor(paletteArray: string[]): string {
   if (
     !paletteArray ||
     !Array.isArray(paletteArray) ||
@@ -40,7 +54,7 @@ function getRandomColor(paletteArray) {
   return paletteArray[Math.floor(Math.random() * paletteArray.length)];
 }
 
-function lightenDarkenColor(hex, percent) {
+export function lightenDarkenColor(hex: string, percent: number): string {
   if (typeof hex !== "string") {
     return "#000000";
   }
@@ -83,13 +97,12 @@ function lightenDarkenColor(hex, percent) {
   return (usePound ? "#" : "") + R + G + B;
 }
 
-function desaturateColor(hex, amount) {
+export function desaturateColor(hex: string, amount: number): string {
   if (typeof hex !== "string") {
     return "#000000";
   }
 
   let usePound = false;
-  const originalHexInputForWarning = hex;
 
   if (hex.startsWith("#")) {
     hex = hex.slice(1);
@@ -131,7 +144,11 @@ function desaturateColor(hex, amount) {
   return (usePound ? "#" : "") + R + G + B;
 }
 
-function interpolateColor(hex1, hex2, factor) {
+export function interpolateColor(
+  hex1: string,
+  hex2: string,
+  factor: number
+): string {
   if (typeof hex1 !== "string" || typeof hex2 !== "string") {
     return typeof hex2 === "string"
       ? hex2
@@ -141,7 +158,7 @@ function interpolateColor(hex1, hex2, factor) {
   }
   factor = Math.max(0, Math.min(1, factor));
 
-  const parseHexComponent = (hexStr) => {
+  const parseHexComponent = (hexStr: string): [number, number, number] => {
     let h = hexStr.startsWith("#") ? hexStr.slice(1) : hexStr;
     if (h.length === 3)
       h = h
@@ -166,7 +183,7 @@ function interpolateColor(hex1, hex2, factor) {
     const g = Math.round(g1 + (g2 - g1) * factor);
     const b = Math.round(b1 + (b2 - b1) * factor);
 
-    const componentToHex = (c) => {
+    const componentToHex = (c: number): string => {
       const hexVal = Math.max(0, Math.min(255, c)).toString(16);
       return hexVal.length === 1 ? "0" + hexVal : hexVal;
     };

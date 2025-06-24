@@ -1,11 +1,23 @@
-// js/ui/ui.renderer.js
-const UIRenderer = {
-  // I.1.C UI Elements: Frames
-  drawPixelArtFrame(ctx, x, y, width, height, themeColors = Palettes.ui) {
-    const outerDark = themeColors.FRAME_DARK || "#101010";
-    const midLight = themeColors.FRAME_LIGHT || "#404040";
-    const innerHighlight = themeColors.FRAME_HIGHLIGHT || "#606060";
-    const thickness = 2; // Each band thickness
+// src/ui/ui.renderer.ts
+import { Palettes } from "../palettes";
+import { drawPixelRect, lightenDarkenColor } from "../utils";
+import { PixelFontData } from "../font";
+import { UI } from "./ui";
+import { Config } from "../config";
+import { StopsManager } from "../stops/stops.manager";
+
+export const UIRenderer = {
+  drawPixelArtFrame(
+    ctx: CanvasRenderingContext2D,
+    x: number,
+    y: number,
+    width: number,
+    height: number
+  ) {
+    const outerDark = Palettes.ui.FRAME_DARK;
+    const midLight = Palettes.ui.FRAME_LIGHT;
+    const innerHighlight = Palettes.ui.FRAME_HIGHLIGHT;
+    const thickness = 2;
 
     drawPixelRect(ctx, x, y, width, height, outerDark);
     drawPixelRect(
@@ -26,7 +38,15 @@ const UIRenderer = {
     );
   },
 
-  drawSimplePixelBorder(ctx, x, y, width, height, color, thickness = 1) {
+  drawSimplePixelBorder(
+    ctx: CanvasRenderingContext2D,
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+    color: string,
+    thickness = 1
+  ) {
     ctx.strokeStyle = color;
     ctx.lineWidth = thickness;
     for (let i = 0; i < thickness; i++) {
@@ -39,12 +59,12 @@ const UIRenderer = {
     }
   },
 
-  createFKeyIcon(fontSettings) {
+  createFKeyIcon(fontSettings: { scale: number }): HTMLCanvasElement {
     const size = 8 * fontSettings.scale;
     const canvas = document.createElement("canvas");
     canvas.width = size;
     canvas.height = size;
-    const ctx = canvas.getContext("2d");
+    const ctx = canvas.getContext("2d")!;
     ctx.imageSmoothingEnabled = false;
 
     const s = fontSettings.scale;
@@ -61,7 +81,6 @@ const UIRenderer = {
     const fData = PixelFontData["F"];
     const charOffsetX = 2 * s;
     const charOffsetY = 1 * s;
-    ctx.fillStyle = Palettes.ui.BUTTON_F_KEY_FG;
     for (let r = 0; r < fData.length; r++) {
       for (let c = 0; c < fData[r].length; c++) {
         if (fData[r][c] === 1) {
@@ -79,26 +98,24 @@ const UIRenderer = {
     return canvas;
   },
 
-  drawRightArrow(ctx, x, y, size, color) {
+  drawRightArrow(
+    ctx: CanvasRenderingContext2D,
+    x: number,
+    y: number,
+    size: number,
+    color: string
+  ) {
     const s = Math.max(1, Math.floor(size / 6));
     const shaftWidth = s * 3;
     const shaftHeight = s * 2;
-
-    // shaft
     drawPixelRect(ctx, x, y - shaftHeight / 2, shaftWidth, shaftHeight, color);
-
-    // head
     const headStartX = x + shaftWidth;
-    // Base of the arrow head (tallest part)
     drawPixelRect(ctx, headStartX, y - s * 3, s, s * 6, color);
-    // Middle part
     drawPixelRect(ctx, headStartX + s, y - s * 2, s, s * 4, color);
-    // Tip (pointy part)
     drawPixelRect(ctx, headStartX + s * 2, y - s, s, s * 2, color);
   },
 
-  // I.1.C UI Icons: Status Lights
-  drawStatusLights(ctx, ui, panelY) {
+  drawStatusLights(ctx: CanvasRenderingContext2D, ui: UI, panelY: number) {
     const lightSize = 8 * ui.fontSettings.scale;
     const padding = 5 * ui.fontSettings.scale;
     const startX = padding + 20;
@@ -128,7 +145,7 @@ const UIRenderer = {
     status.forEach((s, i) => {
       let lightColor = s.active ? s.colorOn : s.colorOff;
       if (s.active && (s.icon === "signal" || s.icon === "light")) {
-        if (Math.floor((ui.game.gameTime * 3) / 8) % 2 === 0) {
+        if (Math.floor(ui.game.gameTime * 3) % 2 === 0) {
           lightColor = lightenDarkenColor(lightColor, -40);
         }
       }
@@ -153,12 +170,10 @@ const UIRenderer = {
     });
   },
 
-  // I.1.C UI Icons: Minimap & III.1.C Minimap Enhancements
-  drawMiniMap(ctx, ui, panelY) {
+  drawMiniMap(ctx: CanvasRenderingContext2D, ui: UI, panelY: number) {
     const mapDimension = ui.height - 10 * ui.fontSettings.scale;
     const mapWidth = mapDimension;
     const mapHeight = mapDimension;
-
     const mapX = Config.CANVAS_WIDTH - mapWidth - 15 * ui.fontSettings.scale;
     const mapY = panelY + (ui.height - mapHeight) / 2;
 
@@ -246,7 +261,7 @@ const UIRenderer = {
             StopsManager.activeStop &&
             StopsManager.activeStop.id === stop.id
           ) {
-            const pulse = (Math.sin(ui.game.gameTime) + 1) / 2;
+            const pulse = (Math.sin(ui.game.gameTime * 4) + 1) / 2;
             const pulseSizeIncrease = Math.floor(
               pulse * 2 * ui.fontSettings.scale
             );

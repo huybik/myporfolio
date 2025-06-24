@@ -1,5 +1,5 @@
-// js/palettes.js
-const Palettes = {
+// src/palettes.ts
+export const Palettes = {
   vehicle: {
     CAR_BODY_MAIN: "#C0392B",
     CAR_BODY_ACCENT: "#E74C3C",

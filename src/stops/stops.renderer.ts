@@ -1,12 +1,22 @@
-// js/stops/stops.renderer.js
-const StopsRenderer = {
-  drawDefaultMarker: (ctx, x, y, isActive, gameTime = 0) => {
+// src/stops/stops.renderer.ts
+import { Palettes } from "../palettes";
+import { drawPixelRect, interpolateColor, lightenDarkenColor } from "../utils";
+import { getRandomColor, getRandomInt } from "../utils";
+
+export const StopsRenderer = {
+  drawDefaultMarker: (
+    ctx: CanvasRenderingContext2D,
+    x: number,
+    y: number,
+    isActive: boolean,
+    gameTime = 0
+  ) => {
     const baseColor = isActive ? "yellow" : "orange";
     const detailColor = isActive ? "black" : "#333";
 
     let pulseFactor = 1.0;
     if (isActive) {
-      pulseFactor = 1.0 + ((Math.sin((gameTime * 5) / 8) + 1) / 2) * 0.1;
+      pulseFactor = 1.0 + ((Math.sin(gameTime * 5) + 1) / 2) * 0.1;
     }
 
     drawPixelRect(
@@ -34,48 +44,29 @@ const StopsRenderer = {
     }
   },
 
-  drawArcadeCabinet: (ctx, x, y, isActive, gameTime = 0) => {
+  drawArcadeCabinet: (
+    ctx: CanvasRenderingContext2D,
+    x: number,
+    y: number,
+    isActive: boolean,
+    gameTime = 0
+  ) => {
     const themePalette = Palettes.gaming;
-    if (
-      !themePalette ||
-      !themePalette.objects_primary ||
-      !themePalette.emissive ||
-      !themePalette.props ||
-      !themePalette.objects_accent
-    ) {
-      StopsRenderer.drawDefaultMarker(ctx, x, y, isActive, gameTime);
-      return;
-    }
-
     const cabinetWidth = 32;
     const cabinetHeight = 55;
-    const screenHeight = 18;
-    const controlPanelHeight = 10;
     const baseHeight = 6;
 
     let mainColor = themePalette.objects_primary.base;
     let accentColor = themePalette.objects_primary.shadow;
-    let screenColor =
-      themePalette.emissive && themePalette.emissive.length > 0
-        ? themePalette.emissive[0]
-        : "#FFFF00";
     let highlightColor = themePalette.objects_primary.light;
 
     if (isActive) {
-      const pulse = (Math.sin((gameTime * 6) / 8) + 1) / 2;
+      const pulse = (Math.sin(gameTime * 6) + 1) / 2;
       mainColor = interpolateColor(
         themePalette.objects_primary.base,
         themePalette.objects_primary.light,
         pulse * 0.5
       );
-      if (themePalette.emissive && themePalette.emissive.length > 0) {
-        screenColor =
-          themePalette.emissive[
-            Math.floor((gameTime * 2) / 8) % themePalette.emissive.length
-          ];
-      } else {
-        screenColor = "#FFFF00";
-      }
     }
 
     drawPixelRect(
@@ -112,10 +103,8 @@ const StopsRenderer = {
     );
 
     const cpWidth = cabinetWidth + 6;
-    const controlPanelColor =
-      themePalette.objects_accent && themePalette.objects_accent.length > 0
-        ? themePalette.objects_accent[0]
-        : "#FF00FF";
+    const controlPanelHeight = 10;
+    const controlPanelColor = themePalette.objects_accent[0];
     drawPixelRect(
       ctx,
       x - cpWidth / 2,
@@ -132,10 +121,7 @@ const StopsRenderer = {
       6,
       accentColor
     );
-    const joystickTopColor =
-      themePalette.props && themePalette.props.length > 0
-        ? themePalette.props[0]
-        : "#FF0000";
+    const joystickTopColor = themePalette.props[0];
     drawPixelRect(
       ctx,
       x - 6,
@@ -145,30 +131,13 @@ const StopsRenderer = {
       joystickTopColor
     );
 
-    const buttonColor1Active =
-      themePalette.props && themePalette.props.length > 1
-        ? themePalette.props[1]
-        : "#FFFF00";
-    const buttonColor1Inactive =
-      themePalette.props && themePalette.props.length > 2
-        ? themePalette.props[2]
-        : "#00FF00";
-    const buttonColor2Active =
-      themePalette.props && themePalette.props.length > 2
-        ? themePalette.props[2]
-        : "#00FF00";
-    const buttonColor2Inactive =
-      themePalette.props && themePalette.props.length > 1
-        ? themePalette.props[1]
-        : "#FFFF00";
-
     drawPixelRect(
       ctx,
       x + 2,
       y - baseHeight - controlPanelHeight + 3,
       3,
       3,
-      isActive ? buttonColor1Active : buttonColor1Inactive
+      isActive ? themePalette.props[1] : themePalette.props[2]
     );
     drawPixelRect(
       ctx,
@@ -176,9 +145,10 @@ const StopsRenderer = {
       y - baseHeight - controlPanelHeight + 3,
       3,
       3,
-      isActive ? buttonColor2Active : buttonColor2Inactive
+      isActive ? themePalette.props[2] : themePalette.props[1]
     );
 
+    const screenHeight = 18;
     drawPixelRect(
       ctx,
       x - cabinetWidth / 2 + 3,
@@ -197,19 +167,12 @@ const StopsRenderer = {
     );
 
     if (isActive) {
-      const numFrames = 3;
-      const screenFrame = Math.floor((gameTime * 2) / 8) % numFrames;
+      const screenFrame = Math.floor(gameTime * 2) % 3;
       const screenPixelSize = 2;
       const screenContentX = x - cabinetWidth / 2 + 6;
       const screenContentY = y - cabinetHeight + 8;
-      const activeScreenColor =
-        themePalette.emissive && themePalette.emissive.length > 0
-          ? screenColor
-          : "#FFFF00";
-      const playerShipColor =
-        themePalette.props && themePalette.props.length > 2
-          ? Palettes.gaming.props[2]
-          : "#00FF00";
+      const activeScreenColor = themePalette.emissive[0];
+      const playerShipColor = themePalette.props[2];
 
       if (screenFrame === 0) {
         drawPixelRect(
@@ -270,10 +233,7 @@ const StopsRenderer = {
           playerShipColor
         );
       } else {
-        const explosionColor =
-          themePalette.emissive && themePalette.emissive.length > 0
-            ? getRandomColor(Palettes.gaming.emissive)
-            : "#FF8C00";
+        const explosionColor = getRandomColor(themePalette.emissive);
         drawPixelRect(
           ctx,
           screenContentX + 4,
@@ -286,10 +246,7 @@ const StopsRenderer = {
     }
 
     const marqueeHeight = 10;
-    const marqueeAccentColor =
-      themePalette.objects_accent && themePalette.objects_accent.length > 1
-        ? themePalette.objects_accent[1]
-        : "#00FF00";
+    const marqueeAccentColor = themePalette.objects_accent[1];
     drawPixelRect(
       ctx,
       x - cabinetWidth / 2 - 2,
@@ -298,10 +255,6 @@ const StopsRenderer = {
       marqueeHeight,
       marqueeAccentColor
     );
-    const marqueeTextColorActive =
-      themePalette.emissive && themePalette.emissive.length > 2
-        ? themePalette.emissive[2]
-        : "#FF69B4";
     if (isActive) {
       drawPixelRect(
         ctx,
@@ -309,7 +262,7 @@ const StopsRenderer = {
         y - cabinetHeight - marqueeHeight + 3,
         10,
         4,
-        marqueeTextColorActive
+        themePalette.emissive[2]
       );
     } else {
       drawPixelRect(
@@ -323,11 +276,8 @@ const StopsRenderer = {
     }
 
     if (isActive) {
-      const glowBaseColor =
-        themePalette.emissive && themePalette.emissive.length > 0
-          ? themePalette.emissive[0]
-          : "#FFFF00";
-      ctx.globalAlpha = ((Math.sin((gameTime * 5) / 8) + 1) / 2) * 0.3 + 0.1;
+      const glowBaseColor = themePalette.emissive[0];
+      ctx.globalAlpha = ((Math.sin(gameTime * 5) + 1) / 2) * 0.3 + 0.1;
       drawPixelRect(
         ctx,
         x - cabinetWidth / 2 - 5,
@@ -340,44 +290,30 @@ const StopsRenderer = {
     }
   },
 
-  drawHolographicTerminal: (ctx, x, y, isActive, gameTime = 0) => {
+  drawHolographicTerminal: (
+    ctx: CanvasRenderingContext2D,
+    x: number,
+    y: number,
+    isActive: boolean,
+    gameTime = 0
+  ) => {
     const themePalette = Palettes.futuristic;
-    if (
-      !themePalette ||
-      !themePalette.emissive ||
-      !themePalette.objects_primary ||
-      !themePalette.objects_accent
-    ) {
-      StopsRenderer.drawDefaultMarker(ctx, x, y, isActive, gameTime);
-      return;
-    }
-
     const baseWidth = 40;
     const baseHeight = 10;
     const postHeight = 20;
     const screenWidth = 35;
     const screenHeight = 25;
 
-    let primaryColor =
-      themePalette.emissive && themePalette.emissive.length > 0
-        ? themePalette.emissive[0]
-        : "#00FFFF";
-    let accentColor = themePalette.objects_primary.shadow;
+    let primaryColor = themePalette.emissive[0];
     let baseStructColor = themePalette.objects_primary.base;
 
     if (isActive) {
-      const pulse = (Math.sin((gameTime * 4) / 8) + 1) / 2;
-      if (themePalette.emissive && themePalette.emissive.length > 1) {
-        primaryColor = interpolateColor(
-          themePalette.emissive[0],
-          themePalette.emissive[1],
-          pulse
-        );
-      } else if (themePalette.emissive && themePalette.emissive.length > 0) {
-        primaryColor = themePalette.emissive[0];
-      } else {
-        primaryColor = "#00FFFF";
-      }
+      const pulse = (Math.sin(gameTime * 4) + 1) / 2;
+      primaryColor = interpolateColor(
+        themePalette.emissive[0],
+        themePalette.emissive[1],
+        pulse
+      );
       baseStructColor = lightenDarkenColor(
         themePalette.objects_primary.base,
         Math.floor(pulse * 20)
@@ -398,7 +334,7 @@ const StopsRenderer = {
       y - baseHeight + 2,
       baseWidth - 4,
       baseHeight - 4,
-      accentColor
+      themePalette.objects_primary.shadow
     );
     drawPixelRect(
       ctx,
@@ -410,11 +346,10 @@ const StopsRenderer = {
     );
 
     const screenY = y - baseHeight - postHeight - screenHeight;
-
     const numLayers = isActive ? 4 : 2;
     for (let i = 0; i < numLayers; i++) {
       const layerAlpha = isActive ? 0.2 + i * 0.15 : 0.3 + i * 0.1;
-      const layerOffset = isActive ? Math.sin((gameTime * 2) / 8 + i) * 3 : 0;
+      const layerOffset = isActive ? Math.sin(gameTime * 2 + i) * 3 : 0;
       const layerWidth = screenWidth + i * 4;
       const layerHeight = screenHeight + i * 2;
 
@@ -430,20 +365,13 @@ const StopsRenderer = {
       ctx.globalAlpha = 1.0;
     }
 
-    const strokeStyleColor =
-      themePalette.objects_accent && themePalette.objects_accent.length > 0
-        ? themePalette.objects_accent[0]
-        : themePalette.objects_primary.light;
     ctx.strokeStyle = isActive
-      ? strokeStyleColor
+      ? themePalette.objects_accent[0]
       : themePalette.objects_primary.light;
     ctx.lineWidth = 1;
-    const lineCount = 5;
-    for (let i = 0; i < lineCount; i++) {
-      const lineYVal = screenY + 4 + i * (screenHeight / lineCount);
-      const scrollOffset = isActive
-        ? ((gameTime * 15) / 8 + i * 5) % screenWidth
-        : 0;
+    for (let i = 0; i < 5; i++) {
+      const lineYVal = screenY + 4 + i * (screenHeight / 5);
+      const scrollOffset = isActive ? (gameTime * 15 + i * 5) % screenWidth : 0;
       ctx.beginPath();
       ctx.moveTo(
         Math.floor(x - screenWidth / 2 + 3 + scrollOffset),
@@ -456,23 +384,19 @@ const StopsRenderer = {
       ctx.stroke();
 
       if (isActive && Math.random() < 0.3) {
-        const glyphColor =
-          themePalette.emissive && themePalette.emissive.length > 2
-            ? themePalette.emissive[2]
-            : "#FFFF00";
         drawPixelRect(
           ctx,
           x - screenWidth / 2 + getRandomInt(5, screenWidth - 10),
           lineYVal - 2,
           2,
           2,
-          glyphColor
+          themePalette.emissive[2]
         );
       }
     }
 
     if (isActive) {
-      ctx.globalAlpha = ((Math.sin((gameTime * 5) / 8) + 1) / 2) * 0.2 + 0.1;
+      ctx.globalAlpha = ((Math.sin(gameTime * 5) + 1) / 2) * 0.2 + 0.1;
       drawPixelRect(
         ctx,
         x - screenWidth / 2 - 10,
@@ -485,18 +409,14 @@ const StopsRenderer = {
     }
   },
 
-  drawPixelWarehouse: (ctx, x, y, isActive, gameTime = 0) => {
+  drawPixelWarehouse: (
+    ctx: CanvasRenderingContext2D,
+    x: number,
+    y: number,
+    isActive: boolean,
+    gameTime = 0
+  ) => {
     const themePalette = Palettes.industrial;
-    if (
-      !themePalette ||
-      !themePalette.objects_primary ||
-      !themePalette.objects_accent ||
-      !themePalette.emissive
-    ) {
-      StopsRenderer.drawDefaultMarker(ctx, x, y, isActive, gameTime);
-      return;
-    }
-
     const buildingWidth = 55;
     const buildingHeight = 45;
     const roofHeight = 12;
@@ -504,33 +424,19 @@ const StopsRenderer = {
     const doorHeight = 28;
 
     let mainColor = themePalette.objects_primary.base;
-    let roofColor = themePalette.objects_primary.shadow;
-    let doorColor =
-      themePalette.objects_accent && themePalette.objects_accent.length > 1
-        ? themePalette.objects_accent[1]
-        : "#A0522D";
-    let highlightColor = themePalette.objects_primary.light;
+    let doorColor = themePalette.objects_accent[1];
 
     if (isActive) {
-      const pulse = (Math.sin((gameTime * 3) / 8) + 1) / 2;
+      const pulse = (Math.sin(gameTime * 3) + 1) / 2;
       mainColor = lightenDarkenColor(
         themePalette.objects_primary.base,
         Math.floor(pulse * 10)
       );
-      if (
-        themePalette.objects_accent &&
-        themePalette.objects_accent.length > 1 &&
-        themePalette.emissive &&
-        themePalette.emissive.length > 0
-      ) {
-        doorColor = interpolateColor(
-          themePalette.objects_accent[1],
-          themePalette.emissive[0],
-          pulse
-        );
-      } else {
-        doorColor = "#FFA500";
-      }
+      doorColor = interpolateColor(
+        themePalette.objects_accent[1],
+        themePalette.emissive[0],
+        pulse
+      );
     }
 
     drawPixelRect(
@@ -555,7 +461,7 @@ const StopsRenderer = {
       y - buildingHeight,
       buildingWidth / 3,
       buildingHeight,
-      highlightColor
+      themePalette.objects_primary.light
     );
 
     for (let i = 0; i < buildingHeight; i += 4) {
@@ -569,7 +475,7 @@ const StopsRenderer = {
       );
     }
 
-    ctx.fillStyle = roofColor;
+    ctx.fillStyle = themePalette.objects_primary.shadow;
     ctx.beginPath();
     ctx.moveTo(
       Math.floor(x - buildingWidth / 2 - 3),
@@ -595,7 +501,7 @@ const StopsRenderer = {
       y - buildingHeight - roofHeight,
       buildingWidth,
       2,
-      lightenDarkenColor(roofColor, 20)
+      lightenDarkenColor(themePalette.objects_primary.shadow, 20)
     );
 
     const doorX = x - doorWidth / 2;
@@ -621,11 +527,7 @@ const StopsRenderer = {
     );
 
     if (isActive) {
-      const lightOn = Math.floor((gameTime * 2) / 8) % 2 === 0;
-      const activeLightColor =
-        themePalette.emissive && themePalette.emissive.length > 0
-          ? themePalette.emissive[0]
-          : "#FFA500";
+      const lightOn = Math.floor(gameTime * 2) % 2 === 0;
       if (lightOn) {
         drawPixelRect(
           ctx,
@@ -633,7 +535,7 @@ const StopsRenderer = {
           y - buildingHeight - roofHeight - 5,
           4,
           3,
-          activeLightColor
+          themePalette.emissive[0]
         );
         ctx.globalAlpha = 0.3;
         drawPixelRect(
@@ -642,7 +544,7 @@ const StopsRenderer = {
           y - buildingHeight - roofHeight - 2,
           8,
           5,
-          activeLightColor
+          themePalette.emissive[0]
         );
         ctx.globalAlpha = 1.0;
       } else {
@@ -657,14 +559,6 @@ const StopsRenderer = {
       }
     }
 
-    const signAccentColor =
-      themePalette.objects_accent && themePalette.objects_accent.length > 0
-        ? themePalette.objects_accent[0]
-        : "#B7410E";
-    const signEmissiveColor =
-      themePalette.emissive && themePalette.emissive.length > 1
-        ? themePalette.emissive[1]
-        : "#FFD700";
     drawPixelRect(
       ctx,
       x + buildingWidth / 2 - 15,
@@ -679,22 +573,18 @@ const StopsRenderer = {
       y - buildingHeight + 6,
       8,
       6,
-      isActive ? signEmissiveColor : signAccentColor
+      isActive ? themePalette.emissive[1] : themePalette.objects_accent[0]
     );
 
     if (isActive) {
-      const glowColorActive =
-        themePalette.emissive && themePalette.emissive.length > 1
-          ? themePalette.emissive[1]
-          : "#FFD700";
-      ctx.globalAlpha = ((Math.sin((gameTime * 5) / 8) + 1) / 2) * 0.15;
+      ctx.globalAlpha = ((Math.sin(gameTime * 5) + 1) / 2) * 0.15;
       drawPixelRect(
         ctx,
         x - buildingWidth / 2 - 5,
         y - buildingHeight - roofHeight - 5,
         buildingWidth + 10,
         buildingHeight + roofHeight + 10,
-        glowColorActive
+        themePalette.emissive[1]
       );
       ctx.globalAlpha = 1.0;
     }
